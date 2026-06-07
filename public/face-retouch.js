@@ -555,12 +555,24 @@
     const rotation = Number(photo.rotation || 0);
     const cached = getFaceAnalysis(photo);
     if (allowCached && cached && cached.rotation === rotation) {
-      return cached;
+      if (!cached.faces.length && shouldUsePortraitFallback(photo)) {
+        photo.__faceRetouchAnalysis = null;
+      } else {
+        return cached;
+      }
+    }
+
+    const refreshedCached = getFaceAnalysis(photo);
+    if (allowCached && refreshedCached && refreshedCached.rotation === rotation) {
+      return refreshedCached;
     }
 
     const sourceCanvas = window.createSourceCanvas(photo, DETECT_MAX_EDGE);
     const detected = await detectFaces(sourceCanvas);
-    const faces = normalizeFaces(detected, sourceCanvas.width, sourceCanvas.height);
+    let faces = normalizeFaces(detected, sourceCanvas.width, sourceCanvas.height);
+    if (!faces.length && shouldUsePortraitFallback(photo)) {
+      faces = normalizeFaces([buildPrimaryFaceCandidate(sourceCanvas.width, sourceCanvas.height)], sourceCanvas.width, sourceCanvas.height);
+    }
     const analysis = {
       rotation,
       sourceWidth: sourceCanvas.width,
@@ -575,6 +587,40 @@
 
   function getFaceAnalysis(photo) {
     return photo?.__faceRetouchAnalysis || null;
+  }
+
+  function shouldUsePortraitFallback(photo) {
+    if (!photo) {
+      return false;
+    }
+
+    const settings = photo.settings || {};
+    const text = [
+      photo.sceneName,
+      photo.smartSummary,
+      settings.styleKey,
+      settings.presetKey
+    ].filter(Boolean).join(" ").toLowerCase();
+
+    return text.includes("portrait") ||
+      text.includes("selfie") ||
+      text.includes("인물") ||
+      text.includes("셀카") ||
+      text.includes("사람") ||
+      text.includes("얼굴");
+  }
+
+  function buildPrimaryFaceCandidate(width, height) {
+    const portraitish = height >= width * 0.9;
+    const faceWidth = width * (portraitish ? 0.58 : 0.42);
+    const faceHeight = height * (portraitish ? 0.56 : 0.46);
+    return {
+      x: (width - faceWidth) * 0.5,
+      y: height * (portraitish ? 0.26 : 0.2),
+      width: faceWidth,
+      height: faceHeight,
+      confidence: 0.36
+    };
   }
 
   async function detectFaces(canvas) {
