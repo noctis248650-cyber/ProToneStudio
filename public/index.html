@@ -24,7 +24,7 @@
       <main class="layout">
         <section class="workspace-card preview-card">
           <div class="preview-toolbar">
-            <span class="eyebrow">WORK CANVAS</span>
+            <span class="scene-title" id="sceneTitle">이미지를 올려주세요</span>
             <span class="status-pill" id="statusText">준비됨</span>
           </div>
 
@@ -32,8 +32,15 @@
             <input id="fileInput" type="file" accept="image/*" multiple hidden />
             <canvas id="previewCanvas"></canvas>
             <div class="compare-labels hidden" id="compareLabels">
-              <span>◁ BEFORE</span>
-              <span>AFTER ▷</span>
+              <button id="beforeButton" type="button">◁ BEFORE</button>
+              <button id="afterButton" type="button">AFTER ▷</button>
+            </div>
+            <button class="compare-handle hidden" id="compareHandle" type="button" aria-label="비포 애프터 비교선 이동">
+              <span>‹</span><span>›</span>
+            </button>
+            <div class="loading-overlay hidden" id="loadingOverlay" aria-live="polite">
+              <span class="loading-spinner"></span>
+              <strong>LOADING</strong>
             </div>
             <div class="empty-state" id="emptyState">
               <strong>이미지를 올려주세요</strong>

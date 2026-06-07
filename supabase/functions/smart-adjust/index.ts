@@ -140,6 +140,7 @@ function buildOpenAiPayload(imageDataUrl: string, stylePrompt: string, requested
               "Avoid fake HDR, crushed blacks, clipped highlights, excessive saturation, and skin tone damage.",
               "For ordinary photos, prefer strength 78-92, contrast 10-28, saturation 6-22, clarity 16-32 unless the scene requires restraint.",
               "sceneName and reason must be Korean.",
+              "sceneName should describe the image content briefly. reason should explain the retouching choice and should not repeat sceneName.",
               "Return integer slider values only."
             ].join("\n")
           },
