@@ -15,11 +15,9 @@
           <h1>프로톤 스튜디오</h1>
         </div>
         <nav class="primary-actions" aria-label="주요 작업">
-          <label class="action-button primary" for="fileInput">이미지 열기</label>
-          <button class="action-button" id="smartButton" type="button">AI 스마트</button>
+          <button class="action-button primary" id="smartButton" type="button">AI 스마트</button>
           <button class="action-button" id="saveButton" type="button">현재 저장</button>
           <button class="action-button" id="saveAllButton" type="button">전체 저장</button>
-          <button class="icon-action" id="resetButton" type="button" aria-label="초기화">↺</button>
         </nav>
       </header>
 
@@ -38,7 +36,7 @@
             <canvas id="previewCanvas"></canvas>
             <div class="empty-state" id="emptyState">
               <strong>이미지를 올려주세요</strong>
-              <span>드래그 앤 드롭 또는 이미지 열기</span>
+              <span>드래그 앤 드롭 또는 클릭</span>
             </div>
           </div>
 
@@ -63,11 +61,6 @@
                   <option value="food">음식 사진</option>
                   <option value="space">공간/부동산</option>
                 </select>
-              </label>
-              <button class="wide-action" id="smartButtonSide" type="button">선택 이미지 스마트 보정</button>
-              <label class="check-row">
-                <input id="autoOnSelect" type="checkbox" checked />
-                <span>이미지 선택 시 자동 판단</span>
               </label>
               <label class="check-row">
                 <input id="autoWhiteBalance" type="checkbox" checked />

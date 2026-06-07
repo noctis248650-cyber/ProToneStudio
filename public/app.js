@@ -8,11 +8,8 @@ const dom = {
   statusText: document.querySelector("#statusText"),
   styleSelect: document.querySelector("#styleSelect"),
   smartButton: document.querySelector("#smartButton"),
-  smartButtonSide: document.querySelector("#smartButtonSide"),
   saveButton: document.querySelector("#saveButton"),
   saveAllButton: document.querySelector("#saveAllButton"),
-  resetButton: document.querySelector("#resetButton"),
-  autoOnSelect: document.querySelector("#autoOnSelect"),
   autoWhiteBalance: document.querySelector("#autoWhiteBalance"),
   autoTone: document.querySelector("#autoTone"),
   smartSummary: document.querySelector("#smartSummary"),
@@ -102,6 +99,7 @@ let renderToken = 0;
 let originalPreview = null;
 let processedPreview = null;
 let smartInFlight = false;
+let aiApiUnavailable = false;
 
 function cloneSettings(source) {
   return { ...DEFAULT_SETTINGS, ...source };
@@ -145,10 +143,8 @@ function bindEvents() {
 
   dom.compareRange.addEventListener("input", drawComparison);
   dom.smartButton.addEventListener("click", applySmartAdjustment);
-  dom.smartButtonSide.addEventListener("click", applySmartAdjustment);
   dom.saveButton.addEventListener("click", saveCurrentImage);
   dom.saveAllButton.addEventListener("click", saveAllImages);
-  dom.resetButton.addEventListener("click", resetCurrentImage);
   dom.styleSelect.addEventListener("change", () => {
     setSummary("스타일이 변경되었습니다. AI 스마트를 누르면 새 스타일로 다시 판단합니다.");
   });
@@ -286,7 +282,7 @@ async function selectPhoto(index) {
   renderFileList();
   updateCurrentInfo();
 
-  if (dom.autoOnSelect.checked && !photo.smartBase) {
+  if (!photo.smartBase) {
     await applySmartAdjustment();
   } else {
     setSummary(photo.smartSummary || "스마트 보정 대기");
@@ -341,7 +337,7 @@ function renderFileList() {
 }
 
 function setButtonsEnabled(enabled) {
-  for (const button of [dom.smartButton, dom.smartButtonSide, dom.saveButton, dom.saveAllButton, dom.resetButton]) {
+  for (const button of [dom.smartButton, dom.saveButton, dom.saveAllButton]) {
     button.disabled = !enabled;
   }
 }
@@ -349,6 +345,10 @@ function setButtonsEnabled(enabled) {
 async function applySmartAdjustment() {
   const photo = selectedPhoto();
   if (!photo || smartInFlight) {
+    if (!photo) {
+      setStatus("이미지를 먼저 올려주세요.");
+      setSummary("작업 캔버스를 클릭해서 이미지를 추가할 수 있습니다.");
+    }
     return;
   }
 
@@ -371,7 +371,7 @@ async function applySmartAdjustment() {
     photo.smartBase = cloneSettings(settings);
     photo.settings = cloneSettings(settings);
     photo.smartSummary = `${localResult.sceneName} · ${localResult.reason}`;
-    setSummary(`${photo.smartSummary} (로컬 분석)`);
+    setSummary(aiApiUnavailable ? `${photo.smartSummary} · AI API 연결 실패로 로컬 보정으로 전환됨` : `${photo.smartSummary} (로컬 분석)`);
     setStatus("로컬 스마트 보정 적용됨");
   } finally {
     smartInFlight = false;
@@ -383,24 +383,34 @@ async function applySmartAdjustment() {
 }
 
 async function requestAiAdjustment(photo) {
+  if (aiApiUnavailable) {
+    throw new Error("AI API is disabled for this session");
+  }
+
   const supabase = getSupabaseConfig();
   const canvas = createSourceCanvas(photo, 960);
   const imageDataUrl = canvas.toDataURL("image/jpeg", 0.82);
-  const response = await fetch(`${supabase.url}/functions/v1/smart-adjust`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "apikey": supabase.anonKey,
-      "Authorization": `Bearer ${supabase.anonKey}`
-    },
-    body: JSON.stringify({ imageDataUrl, style: dom.styleSelect.value })
-  });
+  try {
+    const response = await fetch(`${supabase.url}/functions/v1/smart-adjust`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": supabase.anonKey,
+        "Authorization": `Bearer ${supabase.anonKey}`
+      },
+      body: JSON.stringify({ imageDataUrl, style: dom.styleSelect.value })
+    });
 
-  if (!response.ok) {
-    throw new Error(`AI request failed: ${response.status}`);
+    if (!response.ok) {
+      aiApiUnavailable = true;
+      throw new Error(`AI request failed: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    aiApiUnavailable = true;
+    throw error;
   }
-
-  return response.json();
 }
 
 function getSupabaseConfig() {
@@ -408,6 +418,7 @@ function getSupabaseConfig() {
   const url = String(config.url || "").replace(/\/$/, "");
   const anonKey = String(config.anonKey || "");
   if (!url || !anonKey || url.includes("YOUR_SUPABASE") || anonKey.includes("YOUR_SUPABASE")) {
+    aiApiUnavailable = true;
     throw new Error("Supabase smart-adjust endpoint is not configured");
   }
   return { url, anonKey };
@@ -803,7 +814,7 @@ function drawHandle(context, x, y) {
 }
 
 function drawHud(context, x, y, text) {
-  context.font = "12px Segoe UI, sans-serif";
+  context.font = "12px DNFBitBit, sans-serif";
   const metrics = context.measureText(text);
   const width = metrics.width + 18;
   const height = 26;
@@ -909,10 +920,8 @@ function setSummary(text) {
 }
 
 function setSmartButtonsBusy(busy) {
-  for (const button of [dom.smartButton, dom.smartButtonSide]) {
-    button.disabled = busy || !selectedPhoto();
-    button.textContent = busy ? "분석 중..." : button === dom.smartButton ? "AI 스마트" : "선택 이미지 스마트 보정";
-  }
+  dom.smartButton.disabled = busy || !selectedPhoto();
+  dom.smartButton.textContent = busy ? "분석 중..." : "AI 스마트";
 }
 
 function escapeHtml(text) {

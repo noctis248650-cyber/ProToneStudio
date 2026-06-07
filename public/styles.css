@@ -19,12 +19,13 @@
   --accent-strong: #bcefeb;
   --danger: #d07c70;
   --radius: 10px;
-  --font-title: "DNFBitBit", "Segoe UI", sans-serif;
-  --font-body: "Segoe UI", "Noto Sans KR", sans-serif;
+  --font-title: "DNFBitBit", sans-serif;
+  --font-body: "DNFBitBit", sans-serif;
 }
 
 * {
   box-sizing: border-box;
+  font-weight: 400;
 }
 
 html,
@@ -36,6 +37,7 @@ body {
   margin: 0;
   color: var(--text);
   font-family: var(--font-body);
+  font-synthesis: none;
   background:
     radial-gradient(circle at 12% 0%, rgba(255, 255, 255, 0.06), transparent 24rem),
     radial-gradient(circle at 88% 12%, rgba(143, 216, 210, 0.09), transparent 26rem),
@@ -75,8 +77,8 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  padding: 12px 0 18px;
+  gap: 16px;
+  padding: 10px 0 14px;
   background: linear-gradient(rgba(15, 17, 21, 0.96), rgba(15, 17, 21, 0.78), transparent);
   backdrop-filter: blur(14px);
 }
@@ -105,7 +107,7 @@ button:disabled {
 .primary-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 7px;
   flex-wrap: wrap;
 }
 
@@ -125,8 +127,15 @@ button:disabled {
 }
 
 .action-button,
+.icon-action,
 .wide-action {
-  padding: 0 16px;
+  min-height: 34px;
+  font-size: 0.8rem;
+}
+
+.action-button,
+.wide-action {
+  padding: 0 12px;
 }
 
 .action-button.primary,
@@ -137,7 +146,7 @@ button:disabled {
 }
 
 .icon-action {
-  width: 44px;
+  width: 36px;
   font-size: 1.1rem;
 }
 
@@ -312,7 +321,6 @@ button:disabled {
 .compare-strip span {
   color: var(--subtle);
   font-size: 0.76rem;
-  font-weight: 700;
 }
 
 input[type="range"] {
@@ -375,7 +383,6 @@ summary {
   color: var(--text);
   background: #202633;
   cursor: pointer;
-  font-weight: 700;
   list-style: none;
 }
 
@@ -538,7 +545,6 @@ select {
 
 .file-name {
   color: var(--text);
-  font-weight: 700;
 }
 
 .file-path {
