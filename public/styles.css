@@ -79,8 +79,7 @@ button:disabled {
   justify-content: space-between;
   gap: 16px;
   padding: 4px 0 8px;
-  background: linear-gradient(rgba(15, 17, 21, 0.96), rgba(15, 17, 21, 0.78), transparent);
-  backdrop-filter: blur(14px);
+  background: transparent;
 }
 
 .brand {
