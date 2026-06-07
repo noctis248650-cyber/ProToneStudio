@@ -121,7 +121,7 @@ function bindEvents() {
 
   dom.dropZone.addEventListener("click", () => {
     if (!selectedPhoto()) {
-      dom.fileInput.click();
+      openImageLibrary();
     }
   });
   dom.dropZone.addEventListener("dragover", (event) => {
@@ -285,7 +285,7 @@ function renderFileList() {
   addItem.type = "button";
   addItem.setAttribute("aria-label", "이미지 추가");
   addItem.innerHTML = "<span>+</span>";
-  addItem.addEventListener("click", () => dom.fileInput.click());
+  addItem.addEventListener("click", openImageLibrary);
   dom.fileList.append(addItem);
 
   if (!photos.length) {
@@ -324,6 +324,23 @@ function renderFileList() {
     item.append(selectButton, removeButton);
     dom.fileList.append(item);
   });
+}
+
+function openImageLibrary() {
+  dom.fileInput.accept = "image/*";
+  dom.fileInput.multiple = true;
+  dom.fileInput.removeAttribute("capture");
+
+  if (typeof dom.fileInput.showPicker === "function") {
+    try {
+      dom.fileInput.showPicker();
+      return;
+    } catch (error) {
+      console.warn("Image picker fallback", error);
+    }
+  }
+
+  dom.fileInput.click();
 }
 
 function setButtonsEnabled(enabled) {
