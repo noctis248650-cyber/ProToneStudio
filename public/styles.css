@@ -462,6 +462,37 @@ button:disabled {
   line-height: 1;
 }
 
+.face-retouch-button {
+  color: var(--subtle);
+  border-style: dashed;
+}
+
+.face-retouch-button:disabled {
+  color: var(--subtle);
+  border-color: var(--line);
+  background: linear-gradient(#202633, #151a23);
+  opacity: 0.62;
+}
+
+.face-retouch-button.is-face-retouch-ready {
+  color: var(--text);
+  border-style: solid;
+  border-color: var(--line-strong);
+}
+
+.face-retouch-button.is-face-retouch-detecting {
+  color: var(--accent-strong);
+  border-style: solid;
+}
+
+.face-retouch-button.is-face-retouch-enabled {
+  color: #071011;
+  border-style: solid;
+  border-color: rgba(188, 239, 235, 0.72);
+  background: linear-gradient(#bcefeb, #7ccbc5);
+  opacity: 1;
+}
+
 .tool-button:hover {
   border-color: var(--accent);
   transform: translateY(-1px);

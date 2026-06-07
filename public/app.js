@@ -739,7 +739,7 @@ function renderSelected() {
       return;
     }
     originalPreview = createSourceCanvas(photo, 1800);
-    processedPreview = processCanvas(originalPreview, settings);
+    processedPreview = window.processCanvas(originalPreview, settings);
     previewLoading = false;
     drawComparison();
   });
@@ -1049,7 +1049,7 @@ async function saveCurrentImage() {
     return;
   }
   setStatus("현재 이미지 저장 준비...");
-  await savePhoto(photo, settings);
+  await window.savePhoto(photo, settings);
   setStatus("현재 이미지 저장됨");
 }
 
@@ -1061,7 +1061,7 @@ async function saveAllImages() {
   setStatus("전체 저장 중...");
   for (let index = 0; index < photos.length; index += 1) {
     const photo = photos[index];
-    await savePhoto(photo, cloneSettings(photo.settings || settings));
+    await window.savePhoto(photo, cloneSettings(photo.settings || settings));
     await wait(240);
   }
   setStatus("전체 저장 완료");
@@ -1069,7 +1069,7 @@ async function saveAllImages() {
 
 async function savePhoto(photo, photoSettings) {
   const source = createSourceCanvas(photo, 4096);
-  const processed = processCanvas(source, photoSettings);
+  const processed = window.processCanvas(source, photoSettings);
   const blob = await canvasToBlob(processed, "image/jpeg", 0.94);
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -1124,4 +1124,16 @@ function setAiStatus(_mode, _text) {
   // AI 연결 상태 뱃지는 화면에서 제거했습니다.
 }
 
+function exposeGlobalApi() {
+  Object.assign(window, {
+    createSourceCanvas,
+    processCanvas,
+    renderSelected,
+    savePhoto,
+    selectedPhoto,
+    setSummary
+  });
+}
+
+exposeGlobalApi();
 init();
