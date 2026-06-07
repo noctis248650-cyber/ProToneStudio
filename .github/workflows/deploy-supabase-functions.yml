@@ -21,6 +21,7 @@ jobs:
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+      OPENAI_VISION_MODEL: ${{ secrets.OPENAI_VISION_MODEL }}
       ALLOWED_ORIGINS: ${{ secrets.ALLOWED_ORIGINS }}
 
     steps:
@@ -43,6 +44,7 @@ jobs:
           npx supabase@latest secrets set \
             OPENAI_API_KEY="$OPENAI_API_KEY" \
             OPENAI_MODEL="${OPENAI_MODEL:-gpt-4.1-mini}" \
+            OPENAI_VISION_MODEL="${OPENAI_VISION_MODEL:-${OPENAI_MODEL:-gpt-4.1-mini}}" \
             ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-https://noctis248650-cyber.github.io,http://localhost:5174,http://127.0.0.1:5174}" \
             --project-ref "$SUPABASE_PROJECT_REF"
 
@@ -50,3 +52,8 @@ jobs:
         if: steps.required.outputs.skip != 'true'
         run: |
           npx supabase@latest functions deploy smart-adjust --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Deploy detect-faces function
+        if: steps.required.outputs.skip != 'true'
+        run: |
+          npx supabase@latest functions deploy detect-faces --project-ref "$SUPABASE_PROJECT_REF"

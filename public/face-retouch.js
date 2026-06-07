@@ -42,6 +42,7 @@
     originalSavePhoto: null,
     observer: null,
     pollTimer: 0,
+    aiApiUnavailable: false,
     detectToken: 0,
     detectTimer: 0,
     renderFrame: 0,
@@ -577,6 +578,11 @@
   }
 
   async function detectFaces(canvas) {
+    const aiFaces = await requestAiFaceDetection(canvas);
+    if (aiFaces.length) {
+      return aiFaces;
+    }
+
     if ("FaceDetector" in window) {
       try {
         const detector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 24 });
@@ -596,6 +602,68 @@
     }
 
     return fallbackDetectFaces(canvas);
+  }
+
+  async function requestAiFaceDetection(canvas) {
+    if (state.aiApiUnavailable) {
+      return [];
+    }
+
+    const supabase = getSupabaseConfig();
+    if (!supabase) {
+      state.aiApiUnavailable = true;
+      return [];
+    }
+
+    try {
+      const imageDataUrl = canvas.toDataURL("image/jpeg", 0.82);
+      const response = await fetch(`${supabase.url}/functions/v1/detect-faces`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: supabase.anonKey,
+          Authorization: `Bearer ${supabase.anonKey}`
+        },
+        body: JSON.stringify({ imageDataUrl })
+      });
+
+      if (!response.ok) {
+        state.aiApiUnavailable = true;
+        console.warn("AI face detection failed", response.status);
+        return [];
+      }
+
+      const payload = await response.json();
+      return normalizeAiFaces(payload.faces, canvas.width, canvas.height);
+    } catch (error) {
+      state.aiApiUnavailable = true;
+      console.warn("AI face detection unavailable", error);
+      return [];
+    }
+  }
+
+  function normalizeAiFaces(rawFaces, width, height) {
+    if (!Array.isArray(rawFaces)) {
+      return [];
+    }
+
+    return rawFaces.map((face) => ({
+      x: clamp(Number(face.x) * width, 0, width),
+      y: clamp(Number(face.y) * height, 0, height),
+      width: clamp(Number(face.width) * width, 0, width),
+      height: clamp(Number(face.height) * height, 0, height),
+      confidence: Number.isFinite(Number(face.confidence)) ? clamp(Number(face.confidence), 0, 1) : 0.8
+    }));
+  }
+
+  function getSupabaseConfig() {
+    const config = window.PROTONE_SUPABASE || {};
+    const url = String(config.url || "").replace(/\/$/, "");
+    const anonKey = String(config.anonKey || "");
+    if (!url || !anonKey || url.includes("YOUR_SUPABASE") || anonKey.includes("YOUR_SUPABASE")) {
+      return null;
+    }
+    return { url, anonKey };
   }
 
   function normalizeFaces(rawFaces, sourceWidth, sourceHeight) {
