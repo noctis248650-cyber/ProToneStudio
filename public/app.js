@@ -1075,9 +1075,20 @@ async function saveAllImages() {
   }
 
   setStatus("전체 저장 중...");
+  const exports = [];
   for (let index = 0; index < photos.length; index += 1) {
     const photo = photos[index];
-    await window.savePhoto(photo, cloneSettings(photo.settings || settings));
+    exports.push(await buildPhotoExport(photo, cloneSettings(photo.settings || settings)));
+    await wait(120);
+  }
+
+  if (await sharePhotoExports(exports)) {
+    setStatus("전체 저장 공유창 열림");
+    return;
+  }
+
+  for (const photoExport of exports) {
+    downloadBlob(photoExport.blob, photoExport.fileName);
     await wait(240);
   }
   setStatus("전체 저장 완료");
@@ -1107,6 +1118,28 @@ function downloadBlob(blob, fileName) {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+async function sharePhotoExports(photoExports) {
+  if (!photoExports.length || typeof File !== "function" || typeof navigator.share !== "function" || typeof navigator.canShare !== "function") {
+    return false;
+  }
+
+  const files = photoExports.map(({ blob, fileName }) => new File([blob], fileName, { type: blob.type || "image/jpeg" }));
+  if (!navigator.canShare({ files })) {
+    return false;
+  }
+
+  try {
+    await navigator.share({
+      files,
+      title: "ProTone Studio",
+      text: "보정한 이미지를 저장합니다."
+    });
+    return true;
+  } catch (error) {
+    return error && error.name === "AbortError";
+  }
 }
 
 function canvasToBlob(canvas, type, quality) {
