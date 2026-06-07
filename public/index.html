@@ -15,7 +15,7 @@
           <h1>프로톤 스튜디오</h1>
         </div>
         <nav class="primary-actions" aria-label="주요 작업">
-          <button class="action-button primary" id="smartButton" type="button">AI 스마트</button>
+          <span class="ai-indicator" id="aiStatus" aria-live="polite">AI 대기</span>
           <button class="action-button" id="saveButton" type="button">현재 저장</button>
           <button class="action-button" id="saveAllButton" type="button">전체 저장</button>
         </nav>
@@ -24,26 +24,34 @@
       <main class="layout">
         <section class="workspace-card preview-card">
           <div class="preview-toolbar">
-            <div>
-              <span class="eyebrow">WORK CANVAS</span>
-              <strong id="currentName">이미지 없음</strong>
-            </div>
+            <span class="eyebrow">WORK CANVAS</span>
             <span class="status-pill" id="statusText">준비됨</span>
           </div>
 
           <div class="canvas-stage" id="dropZone">
             <input id="fileInput" type="file" accept="image/*" multiple hidden />
             <canvas id="previewCanvas"></canvas>
+            <div class="compare-labels hidden" id="compareLabels">
+              <span>◁ BEFORE</span>
+              <span>AFTER ▷</span>
+            </div>
             <div class="empty-state" id="emptyState">
               <strong>이미지를 올려주세요</strong>
               <span>드래그 앤 드롭 또는 클릭</span>
             </div>
           </div>
 
-          <div class="compare-strip">
-            <span>BEFORE</span>
-            <input id="compareRange" type="range" min="0" max="100" value="50" />
-            <span>AFTER</span>
+          <div class="canvas-tools" aria-label="이미지 회전">
+            <button class="tool-button" id="rotateLeftButton" type="button">↶ 좌회전</button>
+            <button class="tool-button" id="rotateRightButton" type="button">우회전 ↷</button>
+          </div>
+
+          <div class="thumbnail-panel">
+            <div class="thumbnail-header">
+              <span class="eyebrow">IMAGES</span>
+              <span id="imageCount">0</span>
+            </div>
+            <div class="file-list" id="fileList"></div>
           </div>
         </section>
 
@@ -79,16 +87,6 @@
           </details>
         </aside>
 
-        <aside class="workspace-card queue-card">
-          <div class="queue-header">
-            <div>
-              <span class="eyebrow">QUEUE</span>
-              <strong>이미지 목록</strong>
-            </div>
-            <span id="imageCount">0</span>
-          </div>
-          <div class="file-list" id="fileList"></div>
-        </aside>
       </main>
     </div>
 

@@ -3,13 +3,14 @@ const dom = {
   dropZone: document.querySelector("#dropZone"),
   previewCanvas: document.querySelector("#previewCanvas"),
   emptyState: document.querySelector("#emptyState"),
-  compareRange: document.querySelector("#compareRange"),
-  currentName: document.querySelector("#currentName"),
+  compareLabels: document.querySelector("#compareLabels"),
   statusText: document.querySelector("#statusText"),
+  aiStatus: document.querySelector("#aiStatus"),
   styleSelect: document.querySelector("#styleSelect"),
-  smartButton: document.querySelector("#smartButton"),
   saveButton: document.querySelector("#saveButton"),
   saveAllButton: document.querySelector("#saveAllButton"),
+  rotateLeftButton: document.querySelector("#rotateLeftButton"),
+  rotateRightButton: document.querySelector("#rotateRightButton"),
   smartSummary: document.querySelector("#smartSummary"),
   fileList: document.querySelector("#fileList"),
   imageCount: document.querySelector("#imageCount")
@@ -58,6 +59,10 @@ let originalPreview = null;
 let processedPreview = null;
 let smartInFlight = false;
 let aiApiUnavailable = false;
+let pendingSmartAfterFlight = false;
+let compareSplit = 0.5;
+let compareFrame = null;
+let compareDragging = false;
 
 function cloneSettings(source) {
   return { ...DEFAULT_SETTINGS, ...source, autoWhiteBalance: true, autoTone: true };
@@ -75,6 +80,7 @@ function clampInt(value, min, max, fallback = 0) {
 function init() {
   bindEvents();
   setButtonsEnabled(false);
+  setAiStatus("idle", "AI 대기");
   updateControlsFromSettings();
   drawComparison();
 }
@@ -85,7 +91,11 @@ function bindEvents() {
     event.target.value = "";
   });
 
-  dom.dropZone.addEventListener("click", () => dom.fileInput.click());
+  dom.dropZone.addEventListener("click", () => {
+    if (!selectedPhoto()) {
+      dom.fileInput.click();
+    }
+  });
   dom.dropZone.addEventListener("dragover", (event) => {
     event.preventDefault();
     dom.dropZone.classList.add("dragging");
@@ -97,12 +107,22 @@ function bindEvents() {
     handleFiles(event.dataTransfer.files);
   });
 
-  dom.compareRange.addEventListener("input", drawComparison);
-  dom.smartButton.addEventListener("click", applySmartAdjustment);
+  dom.dropZone.addEventListener("pointerdown", startCompareDrag);
+  dom.dropZone.addEventListener("pointermove", moveCompareDrag);
+  dom.dropZone.addEventListener("pointerup", stopCompareDrag);
+  dom.dropZone.addEventListener("pointercancel", stopCompareDrag);
   dom.saveButton.addEventListener("click", saveCurrentImage);
   dom.saveAllButton.addEventListener("click", saveAllImages);
+  dom.rotateLeftButton.addEventListener("click", () => rotateSelectedPhoto(-90));
+  dom.rotateRightButton.addEventListener("click", () => rotateSelectedPhoto(90));
   dom.styleSelect.addEventListener("change", () => {
-    setSummary("스타일이 변경되었습니다. AI 스마트를 누르면 새 스타일로 다시 판단합니다.");
+    const photo = selectedPhoto();
+    if (!photo) {
+      setSummary("이미지를 올리면 선택한 스타일로 자동 분석합니다.");
+      return;
+    }
+    setSummary("스타일이 변경되어 AI 분석을 다시 시작합니다.");
+    void applySmartAdjustment();
   });
 
   window.addEventListener("resize", drawComparison);
@@ -132,6 +152,7 @@ async function handleFiles(fileList) {
         image: image.source,
         width: image.width,
         height: image.height,
+        rotation: 0,
         settings: null,
         smartBase: null,
         smartSummary: ""
@@ -189,10 +210,11 @@ async function selectPhoto(index) {
 
   selectedIndex = index;
   const photo = selectedPhoto();
+  compareSplit = 0.5;
   settings = cloneSettings(photo.settings || DEFAULT_SETTINGS);
   updateControlsFromSettings();
+  setButtonsEnabled(true);
   renderFileList();
-  updateCurrentInfo();
 
   if (!photo.smartBase) {
     await applySmartAdjustment();
@@ -214,15 +236,6 @@ function persistSelectedSettings() {
   photo.settings = cloneSettings(settings);
 }
 
-function updateCurrentInfo() {
-  const photo = selectedPhoto();
-  if (!photo) {
-    dom.currentName.textContent = "이미지 없음";
-    return;
-  }
-  dom.currentName.textContent = `${photo.name} · ${photo.width} x ${photo.height}`;
-}
-
 function renderFileList() {
   dom.imageCount.textContent = String(photos.length);
   dom.fileList.replaceChildren();
@@ -230,33 +243,113 @@ function renderFileList() {
   if (!photos.length) {
     const empty = document.createElement("div");
     empty.className = "file-empty";
-    empty.textContent = "아직 추가된 이미지가 없습니다.";
+    empty.textContent = "이미지를 추가하면 여기에 표시됩니다.";
     dom.fileList.append(empty);
     return;
   }
 
   photos.forEach((photo, index) => {
-    const item = document.createElement("button");
+    const item = document.createElement("div");
     item.className = `file-item${index === selectedIndex ? " selected" : ""}`;
-    item.type = "button";
-    item.innerHTML = `
-      <span class="file-name">${escapeHtml(photo.name)}</span>
-      <span class="file-path">${escapeHtml(photo.path)}</span>
-    `;
-    item.addEventListener("click", () => selectPhoto(index));
+
+    const selectButton = document.createElement("button");
+    selectButton.className = "thumbnail-button";
+    selectButton.type = "button";
+    selectButton.setAttribute("aria-label", "이미지 선택");
+    selectButton.addEventListener("click", () => selectPhoto(index));
+
+    const thumbnail = document.createElement("img");
+    thumbnail.alt = "";
+    thumbnail.src = createThumbnailDataUrl(photo);
+    selectButton.append(thumbnail);
+
+    const removeButton = document.createElement("button");
+    removeButton.className = "remove-thumb";
+    removeButton.type = "button";
+    removeButton.setAttribute("aria-label", "이미지 제거");
+    removeButton.textContent = "X";
+    removeButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void removePhoto(index);
+    });
+
+    item.append(selectButton, removeButton);
     dom.fileList.append(item);
   });
 }
 
 function setButtonsEnabled(enabled) {
-  for (const button of [dom.smartButton, dom.saveButton, dom.saveAllButton]) {
-    button.disabled = !enabled;
+  const hasPhoto = Boolean(selectedPhoto()) && enabled;
+  const hasAny = photos.length > 0 && enabled;
+  dom.saveButton.disabled = !hasPhoto;
+  dom.saveAllButton.disabled = !hasAny;
+  dom.rotateLeftButton.disabled = !hasPhoto;
+  dom.rotateRightButton.disabled = !hasPhoto;
+}
+
+function createThumbnailDataUrl(photo) {
+  const canvas = createSourceCanvas(photo, 280);
+  return canvas.toDataURL("image/jpeg", 0.74);
+}
+
+async function removePhoto(index) {
+  if (index < 0 || index >= photos.length) {
+    return;
   }
+
+  const removedSelected = index === selectedIndex;
+  photos.splice(index, 1);
+
+  if (!photos.length) {
+    selectedIndex = -1;
+    settings = cloneSettings(DEFAULT_SETTINGS);
+    originalPreview = null;
+    processedPreview = null;
+    compareFrame = null;
+    setButtonsEnabled(false);
+    setAiStatus("idle", "AI 대기");
+    setStatus("준비됨");
+    setSummary("스마트 보정 대기");
+    renderFileList();
+    drawComparison();
+    return;
+  }
+
+  if (index < selectedIndex) {
+    selectedIndex -= 1;
+  }
+
+  if (removedSelected) {
+    await selectPhoto(Math.min(index, photos.length - 1));
+  } else {
+    setButtonsEnabled(true);
+    renderFileList();
+  }
+}
+
+function rotateSelectedPhoto(delta) {
+  const photo = selectedPhoto();
+  if (!photo) {
+    return;
+  }
+
+  photo.rotation = normalizeRotation((photo.rotation || 0) + delta);
+  photo.settings = cloneSettings(settings);
+  renderFileList();
+  renderSelected();
+  setStatus("회전 적용됨");
+}
+
+function normalizeRotation(value) {
+  return ((Math.round(value / 90) * 90) % 360 + 360) % 360;
 }
 
 async function applySmartAdjustment() {
   const photo = selectedPhoto();
   if (!photo || smartInFlight) {
+    if (smartInFlight) {
+      pendingSmartAfterFlight = true;
+    }
     if (!photo) {
       setStatus("이미지를 먼저 올려주세요.");
       setSummary("작업 캔버스를 클릭해서 이미지를 추가할 수 있습니다.");
@@ -265,7 +358,8 @@ async function applySmartAdjustment() {
   }
 
   smartInFlight = true;
-  setSmartButtonsBusy(true);
+  setAiStatus("busy", "AI 분석중");
+  setButtonsEnabled(true);
   setStatus("AI 스마트 분석 중...");
   setSummary("사진의 밝기, 색온도, 대비, 장면 분위기를 분석하고 있습니다.");
 
@@ -276,6 +370,7 @@ async function applySmartAdjustment() {
     photo.settings = cloneSettings(settings);
     photo.smartSummary = `${aiResult.sceneName || "AI 자동"} · ${aiResult.reason || "사진에 맞는 보정값을 적용했습니다."} · ${formatSettingsDigest(settings)}`;
     setSummary(photo.smartSummary);
+    setAiStatus("ready", "AI 연결됨");
     setStatus("AI 보정 적용됨");
   } catch (error) {
     const localResult = await buildLocalSmartAdjustment(photo);
@@ -284,13 +379,18 @@ async function applySmartAdjustment() {
     photo.settings = cloneSettings(settings);
     photo.smartSummary = `${localResult.sceneName} · ${localResult.reason} · ${formatSettingsDigest(settings)}`;
     setSummary(aiApiUnavailable ? `${photo.smartSummary} · AI API 연결 실패로 로컬 보정으로 전환됨` : `${photo.smartSummary} (로컬 분석)`);
+    setAiStatus("offline", "AI 연결안됨");
     setStatus("로컬 스마트 보정 적용됨");
   } finally {
     smartInFlight = false;
-    setSmartButtonsBusy(false);
+    setButtonsEnabled(true);
     updateControlsFromSettings();
     renderFileList();
     renderSelected();
+    if (pendingSmartAfterFlight) {
+      pendingSmartAfterFlight = false;
+      void applySmartAdjustment();
+    }
   }
 }
 
@@ -460,7 +560,6 @@ function renderSelected() {
   }
 
   persistSelectedSettings();
-  updateCurrentInfo();
   setStatus("보정 중...");
 
   requestAnimationFrame(() => {
@@ -470,21 +569,39 @@ function renderSelected() {
     originalPreview = createSourceCanvas(photo, 1800);
     processedPreview = processCanvas(originalPreview, settings);
     drawComparison();
-    setStatus(`${processedPreview.width} x ${processedPreview.height}`);
+    setStatus("보정 완료");
   });
 }
 
 function createSourceCanvas(photo, maxEdge) {
-  const scale = Math.min(1, maxEdge / Math.max(photo.width, photo.height));
-  const width = Math.max(1, Math.round(photo.width * scale));
-  const height = Math.max(1, Math.round(photo.height * scale));
+  const rotation = normalizeRotation(photo.rotation || 0);
+  const rotated = rotation === 90 || rotation === 270;
+  const outputSourceWidth = rotated ? photo.height : photo.width;
+  const outputSourceHeight = rotated ? photo.width : photo.height;
+  const scale = Math.min(1, maxEdge / Math.max(outputSourceWidth, outputSourceHeight));
+  const width = Math.max(1, Math.round(outputSourceWidth * scale));
+  const height = Math.max(1, Math.round(outputSourceHeight * scale));
+  const drawWidth = Math.max(1, Math.round(photo.width * scale));
+  const drawHeight = Math.max(1, Math.round(photo.height * scale));
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext("2d");
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
-  context.drawImage(photo.image, 0, 0, width, height);
+  context.save();
+  if (rotation === 90) {
+    context.translate(width, 0);
+    context.rotate(Math.PI / 2);
+  } else if (rotation === 180) {
+    context.translate(width, height);
+    context.rotate(Math.PI);
+  } else if (rotation === 270) {
+    context.translate(0, height);
+    context.rotate(-Math.PI / 2);
+  }
+  context.drawImage(photo.image, 0, 0, drawWidth, drawHeight);
+  context.restore();
   return canvas;
 }
 
@@ -616,6 +733,46 @@ function analyzeImageData(imageData, sampleStep) {
   };
 }
 
+function startCompareDrag(event) {
+  if (!selectedPhoto() || event.button !== 0) {
+    return;
+  }
+
+  compareDragging = true;
+  dom.dropZone.setPointerCapture?.(event.pointerId);
+  updateCompareFromEvent(event);
+  event.preventDefault();
+}
+
+function moveCompareDrag(event) {
+  if (!compareDragging) {
+    return;
+  }
+
+  updateCompareFromEvent(event);
+  event.preventDefault();
+}
+
+function stopCompareDrag(event) {
+  if (!compareDragging) {
+    return;
+  }
+
+  compareDragging = false;
+  dom.dropZone.releasePointerCapture?.(event.pointerId);
+}
+
+function updateCompareFromEvent(event) {
+  if (!compareFrame) {
+    return;
+  }
+
+  const rect = dom.dropZone.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  compareSplit = clamp((x - compareFrame.x) / compareFrame.width, 0, 1);
+  drawComparison();
+}
+
 function drawComparison() {
   const canvas = dom.previewCanvas;
   const context = canvas.getContext("2d");
@@ -635,16 +792,20 @@ function drawComparison() {
   context.fillRect(0, 0, cssWidth, cssHeight);
 
   const hasImage = Boolean(originalPreview && processedPreview);
+  dom.dropZone.classList.toggle("has-image", hasImage);
   dom.emptyState.classList.toggle("hidden", hasImage);
+  dom.compareLabels.classList.toggle("hidden", !hasImage);
   if (!hasImage) {
+    compareFrame = null;
     return;
   }
 
   const fit = fitInside(processedPreview.width, processedPreview.height, cssWidth - 34, cssHeight - 34);
   const drawX = Math.round((cssWidth - fit.width) / 2);
   const drawY = Math.round((cssHeight - fit.height) / 2);
-  const split = Number(dom.compareRange.value) / 100;
+  const split = clamp(compareSplit, 0, 1);
   const splitX = drawX + fit.width * split;
+  compareFrame = { x: drawX, y: drawY, width: fit.width, height: fit.height };
 
   context.save();
   context.shadowColor = "rgba(0, 0, 0, 0.55)";
@@ -654,12 +815,12 @@ function drawComparison() {
   context.fillRect(drawX - 8, drawY - 8, fit.width + 16, fit.height + 16);
   context.restore();
 
-  context.drawImage(processedPreview, drawX, drawY, fit.width, fit.height);
+  context.drawImage(originalPreview, drawX, drawY, fit.width, fit.height);
   context.save();
   context.beginPath();
   context.rect(drawX, drawY, fit.width * split, fit.height);
   context.clip();
-  context.drawImage(originalPreview, drawX, drawY, fit.width, fit.height);
+  context.drawImage(processedPreview, drawX, drawY, fit.width, fit.height);
   context.restore();
 
   context.strokeStyle = "rgba(238, 241, 246, 0.82)";
@@ -670,7 +831,6 @@ function drawComparison() {
   context.stroke();
 
   drawHandle(context, splitX, drawY + fit.height / 2);
-  drawHud(context, drawX, drawY, `${processedPreview.width} x ${processedPreview.height}`);
 }
 
 function drawHandle(context, x, y) {
@@ -685,22 +845,14 @@ function drawHandle(context, x, y) {
   context.stroke();
 
   context.fillStyle = "#d9dee8";
-  context.fillRect(x - 6, y - 9, 2, 18);
-  context.fillRect(x + 4, y - 9, 2, 18);
-}
-
-function drawHud(context, x, y, text) {
-  context.font = "12px DNFBitBit, sans-serif";
-  const metrics = context.measureText(text);
-  const width = metrics.width + 18;
-  const height = 26;
-  roundRect(context, x + 10, y + 10, width, height, 6);
-  context.fillStyle = "rgba(10, 12, 16, 0.74)";
-  context.fill();
-  context.strokeStyle = "rgba(255, 255, 255, 0.16)";
-  context.stroke();
-  context.fillStyle = "rgba(238, 241, 246, 0.82)";
-  context.fillText(text, x + 19, y + 28);
+  context.font = "14px DNFBitBit, sans-serif";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText("<", x - 10, y + 1);
+  context.fillText("I", x, y + 1);
+  context.fillText(">", x + 10, y + 1);
+  context.textAlign = "start";
+  context.textBaseline = "alphabetic";
 }
 
 function fitInside(width, height, maxWidth, maxHeight) {
@@ -795,19 +947,10 @@ function setSummary(text) {
   dom.smartSummary.textContent = text;
 }
 
-function setSmartButtonsBusy(busy) {
-  dom.smartButton.disabled = busy || !selectedPhoto();
-  dom.smartButton.textContent = busy ? "분석 중..." : "AI 스마트";
-}
-
-function escapeHtml(text) {
-  return String(text).replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    "\"": "&quot;",
-    "'": "&#039;"
-  })[char]);
+function setAiStatus(mode, text) {
+  dom.aiStatus.classList.remove("is-idle", "is-busy", "is-ready", "is-offline");
+  dom.aiStatus.classList.add(`is-${mode}`);
+  dom.aiStatus.textContent = text;
 }
 
 init();
