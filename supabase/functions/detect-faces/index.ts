@@ -112,7 +112,7 @@ function buildOpenAiPayload(imageDataUrl: string) {
           {
             type: "input_image",
             image_url: imageDataUrl,
-            detail: "low"
+            detail: "high"
           }
         ]
       }

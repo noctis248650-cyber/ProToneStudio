@@ -628,7 +628,6 @@
       });
 
       if (!response.ok) {
-        state.aiApiUnavailable = true;
         console.warn("AI face detection failed", response.status);
         return [];
       }
@@ -636,7 +635,6 @@
       const payload = await response.json();
       return normalizeAiFaces(payload.faces, canvas.width, canvas.height);
     } catch (error) {
-      state.aiApiUnavailable = true;
       console.warn("AI face detection unavailable", error);
       return [];
     }
