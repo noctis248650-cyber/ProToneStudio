@@ -1,0 +1,4 @@
+project_id = "protone-studio"
+
+[functions.smart-adjust]
+verify_jwt = true

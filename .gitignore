@@ -1,11 +1,8 @@
 node_modules/
-.firebase/
-.runtimeconfig.json
-firebase-debug.log
-firebase-debug.*.log
-functions/node_modules/
-functions/.env
-functions/.env.*
+supabase/.branches/
+supabase/.temp/
+.env
+.env.*
 !.env.example
 dist/
 *firebase-adminsdk*.json

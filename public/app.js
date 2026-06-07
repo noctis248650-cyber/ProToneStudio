@@ -383,11 +383,16 @@ async function applySmartAdjustment() {
 }
 
 async function requestAiAdjustment(photo) {
+  const supabase = getSupabaseConfig();
   const canvas = createSourceCanvas(photo, 960);
   const imageDataUrl = canvas.toDataURL("image/jpeg", 0.82);
-  const response = await fetch("/api/smart-adjust", {
+  const response = await fetch(`${supabase.url}/functions/v1/smart-adjust`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": supabase.anonKey,
+      "Authorization": `Bearer ${supabase.anonKey}`
+    },
     body: JSON.stringify({ imageDataUrl, style: dom.styleSelect.value })
   });
 
@@ -396,6 +401,16 @@ async function requestAiAdjustment(photo) {
   }
 
   return response.json();
+}
+
+function getSupabaseConfig() {
+  const config = window.PROTONE_SUPABASE || {};
+  const url = String(config.url || "").replace(/\/$/, "");
+  const anonKey = String(config.anonKey || "");
+  if (!url || !anonKey || url.includes("YOUR_SUPABASE") || anonKey.includes("YOUR_SUPABASE")) {
+    throw new Error("Supabase smart-adjust endpoint is not configured");
+  }
+  return { url, anonKey };
 }
 
 async function buildLocalSmartAdjustment(photo) {
