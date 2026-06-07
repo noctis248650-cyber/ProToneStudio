@@ -14,6 +14,9 @@ const dom = {
   saveButton: document.querySelector("#saveButton"),
   saveAllButton: document.querySelector("#saveAllButton"),
   rotateButton: document.querySelector("#rotateButton"),
+  zoomOutButton: document.querySelector("#zoomOutButton"),
+  zoomResetButton: document.querySelector("#zoomResetButton"),
+  zoomInButton: document.querySelector("#zoomInButton"),
   smartSummary: document.querySelector("#smartSummary"),
   detailGrid: document.querySelector("#detailGrid"),
   fileList: document.querySelector("#fileList"),
@@ -21,6 +24,8 @@ const dom = {
 };
 
 const IMAGE_PICKER_ACCEPT = "image/jpeg,image/png,image/webp,image/heic,image/heif";
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 5;
 
 const DEFAULT_SETTINGS = Object.freeze({
   styleKey: "natural",
@@ -93,6 +98,11 @@ let batchInFlight = false;
 let compareSplit = 0.5;
 let compareFrame = null;
 let compareDragging = false;
+let zoomScale = 1;
+let zoomPan = { x: 0, y: 0 };
+let stagePointers = new Map();
+let panStart = null;
+let pinchStart = null;
 let previewLoading = false;
 
 function cloneSettings(source) {
@@ -137,6 +147,11 @@ function bindEvents() {
     dom.dropZone.classList.remove("dragging");
     handleFiles(event.dataTransfer.files);
   });
+  dom.dropZone.addEventListener("wheel", handleStageWheel, { passive: false });
+  dom.dropZone.addEventListener("pointerdown", startStageInteraction);
+  dom.dropZone.addEventListener("pointermove", moveStageInteraction);
+  dom.dropZone.addEventListener("pointerup", stopStageInteraction);
+  dom.dropZone.addEventListener("pointercancel", stopStageInteraction);
 
   dom.compareHandle.addEventListener("pointerdown", startCompareDrag);
   dom.compareHandle.addEventListener("click", (event) => event.stopPropagation());
@@ -155,6 +170,9 @@ function bindEvents() {
   dom.saveButton.addEventListener("click", saveCurrentImage);
   dom.saveAllButton.addEventListener("click", saveAllImages);
   dom.rotateButton.addEventListener("click", () => rotateSelectedPhoto(-90));
+  dom.zoomOutButton?.addEventListener("click", () => stepZoom(-0.35));
+  dom.zoomResetButton?.addEventListener("click", resetZoomView);
+  dom.zoomInButton?.addEventListener("click", () => stepZoom(0.35));
   dom.styleSelect.addEventListener("change", () => {
     const photo = selectedPhoto();
     if (!photo) {
@@ -252,6 +270,7 @@ async function selectPhoto(index) {
   selectedIndex = index;
   const photo = selectedPhoto();
   compareSplit = 0.5;
+  resetZoomView(false);
   settings = cloneSettings(photo.settings || DEFAULT_SETTINGS);
   updateControlsFromSettings();
   updateSceneTitle(photo.sceneName || "분석 대기");
@@ -350,6 +369,7 @@ function setButtonsEnabled(enabled) {
   dom.saveButton.disabled = !hasPhoto;
   dom.saveAllButton.disabled = !hasAny;
   dom.rotateButton.disabled = !hasPhoto;
+  updateZoomControls();
 }
 
 function createThumbnailDataUrl(photo) {
@@ -371,6 +391,7 @@ async function removePhoto(index) {
     originalPreview = null;
     processedPreview = null;
     compareFrame = null;
+    resetZoomView(false);
     setButtonsEnabled(false);
     setAiStatus("idle", "AI 대기");
     updateSceneTitle("이미지를 올려주세요");
@@ -402,6 +423,7 @@ function rotateSelectedPhoto(delta) {
 
   photo.rotation = normalizeRotation((photo.rotation || 0) + delta);
   photo.settings = cloneSettings(settings);
+  resetZoomView(false);
   renderFileList();
   renderSelected();
   setStatus("회전 적용됨");
@@ -485,6 +507,7 @@ async function retouchAllImages() {
       const photo = selectedPhoto();
       settings = cloneSettings(photo.settings || DEFAULT_SETTINGS);
       compareSplit = 0.5;
+      resetZoomView(false);
       updateControlsFromSettings();
       renderFileList();
       updateSceneTitle(`전체 보정 중 ${index + 1}/${photos.length}`);
@@ -921,6 +944,230 @@ function analyzeImageData(imageData, sampleStep) {
   };
 }
 
+function resetZoomView(redraw = true) {
+  zoomScale = MIN_ZOOM;
+  zoomPan = { x: 0, y: 0 };
+  stagePointers.clear();
+  panStart = null;
+  pinchStart = null;
+  dom.dropZone.classList.remove("is-panning");
+  updateZoomControls();
+  if (redraw) {
+    drawComparison();
+  }
+}
+
+function stepZoom(delta) {
+  if (!selectedPhoto() || !processedPreview) {
+    return;
+  }
+  setZoomScale(zoomScale + delta);
+}
+
+function handleStageWheel(event) {
+  if (!selectedPhoto() || previewLoading || !processedPreview) {
+    return;
+  }
+
+  event.preventDefault();
+  const factor = event.deltaY > 0 ? 0.86 : 1.16;
+  setZoomScale(zoomScale * factor, getStagePoint(event));
+}
+
+function startStageInteraction(event) {
+  if (!selectedPhoto() || previewLoading || event.button !== 0 || isStageControlTarget(event.target)) {
+    return;
+  }
+
+  stagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  dom.dropZone.setPointerCapture?.(event.pointerId);
+
+  if (stagePointers.size === 1) {
+    panStart = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      panX: zoomPan.x,
+      panY: zoomPan.y
+    };
+    pinchStart = null;
+  } else if (stagePointers.size === 2) {
+    pinchStart = buildPinchStart();
+    panStart = null;
+  }
+
+  updateStagePanClass();
+  event.preventDefault();
+}
+
+function moveStageInteraction(event) {
+  if (!stagePointers.has(event.pointerId)) {
+    return;
+  }
+
+  stagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+  if (stagePointers.size >= 2 && pinchStart) {
+    const points = [...stagePointers.values()].slice(0, 2);
+    const distance = getPointDistance(points[0], points[1]);
+    const center = getPointCenter(points[0], points[1]);
+    zoomScale = clamp(pinchStart.zoom * distance / Math.max(1, pinchStart.distance), MIN_ZOOM, MAX_ZOOM);
+    zoomPan = {
+      x: pinchStart.panX + center.x - pinchStart.centerX,
+      y: pinchStart.panY + center.y - pinchStart.centerY
+    };
+    clampZoomPanForCurrent();
+    updateZoomControls();
+    drawComparison();
+    event.preventDefault();
+    return;
+  }
+
+  if (panStart && panStart.pointerId === event.pointerId && zoomScale > MIN_ZOOM) {
+    zoomPan = {
+      x: panStart.panX + event.clientX - panStart.x,
+      y: panStart.panY + event.clientY - panStart.y
+    };
+    clampZoomPanForCurrent();
+    drawComparison();
+    event.preventDefault();
+  }
+}
+
+function stopStageInteraction(event) {
+  if (!stagePointers.has(event.pointerId)) {
+    return;
+  }
+
+  stagePointers.delete(event.pointerId);
+  dom.dropZone.releasePointerCapture?.(event.pointerId);
+
+  if (stagePointers.size === 1) {
+    const [remaining] = stagePointers.entries();
+    panStart = {
+      pointerId: remaining[0],
+      x: remaining[1].x,
+      y: remaining[1].y,
+      panX: zoomPan.x,
+      panY: zoomPan.y
+    };
+    pinchStart = null;
+  } else {
+    panStart = null;
+    pinchStart = stagePointers.size >= 2 ? buildPinchStart() : null;
+  }
+
+  updateStagePanClass();
+}
+
+function buildPinchStart() {
+  const points = [...stagePointers.values()].slice(0, 2);
+  const center = getPointCenter(points[0], points[1]);
+  return {
+    distance: getPointDistance(points[0], points[1]),
+    centerX: center.x,
+    centerY: center.y,
+    zoom: zoomScale,
+    panX: zoomPan.x,
+    panY: zoomPan.y
+  };
+}
+
+function setZoomScale(value, anchor = getStageCenter()) {
+  if (!processedPreview) {
+    return;
+  }
+
+  const nextZoom = clamp(value, MIN_ZOOM, MAX_ZOOM);
+  const previousZoom = zoomScale;
+  const center = getStageCenter();
+  zoomPan = {
+    x: anchor.x - center.x - ((anchor.x - center.x - zoomPan.x) * nextZoom / previousZoom),
+    y: anchor.y - center.y - ((anchor.y - center.y - zoomPan.y) * nextZoom / previousZoom)
+  };
+  zoomScale = nextZoom;
+  clampZoomPanForCurrent();
+  updateZoomControls();
+  drawComparison();
+}
+
+function clampZoomPanForCurrent() {
+  if (!processedPreview) {
+    zoomPan = { x: 0, y: 0 };
+    return;
+  }
+
+  const rect = dom.dropZone.getBoundingClientRect();
+  const cssWidth = Math.max(1, Math.floor(rect.width));
+  const cssHeight = Math.max(1, Math.floor(rect.height));
+  const baseFit = fitInside(processedPreview.width, processedPreview.height, cssWidth - 34, cssHeight - 34);
+  clampZoomPan(cssWidth, cssHeight, baseFit.width * zoomScale, baseFit.height * zoomScale);
+}
+
+function clampZoomPan(cssWidth, cssHeight, imageWidth, imageHeight) {
+  if (zoomScale <= MIN_ZOOM) {
+    zoomPan = { x: 0, y: 0 };
+    return;
+  }
+
+  const maxX = Math.max(0, (imageWidth - Math.max(1, cssWidth - 34)) / 2);
+  const maxY = Math.max(0, (imageHeight - Math.max(1, cssHeight - 34)) / 2);
+  zoomPan = {
+    x: clamp(zoomPan.x, -maxX, maxX),
+    y: clamp(zoomPan.y, -maxY, maxY)
+  };
+}
+
+function updateZoomControls() {
+  const hasPhoto = Boolean(selectedPhoto() && processedPreview && !previewLoading) && !batchInFlight;
+  if (dom.zoomResetButton) {
+    dom.zoomResetButton.textContent = `${Number(zoomScale.toFixed(1))}x`;
+    dom.zoomResetButton.disabled = !hasPhoto || zoomScale <= MIN_ZOOM + 0.01;
+  }
+  if (dom.zoomOutButton) {
+    dom.zoomOutButton.disabled = !hasPhoto || zoomScale <= MIN_ZOOM + 0.01;
+  }
+  if (dom.zoomInButton) {
+    dom.zoomInButton.disabled = !hasPhoto || zoomScale >= MAX_ZOOM - 0.01;
+  }
+}
+
+function updateStagePanClass() {
+  dom.dropZone.classList.toggle("is-panning", stagePointers.size > 0 && zoomScale > MIN_ZOOM);
+}
+
+function getStagePoint(event) {
+  const rect = dom.dropZone.getBoundingClientRect();
+  return {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top
+  };
+}
+
+function getStageCenter() {
+  const rect = dom.dropZone.getBoundingClientRect();
+  return {
+    x: rect.width / 2,
+    y: rect.height / 2
+  };
+}
+
+function getPointDistance(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function getPointCenter(a, b) {
+  const rect = dom.dropZone.getBoundingClientRect();
+  return {
+    x: (a.x + b.x) / 2 - rect.left,
+    y: (a.y + b.y) / 2 - rect.top
+  };
+}
+
+function isStageControlTarget(target) {
+  return Boolean(target?.closest?.("button, input, select, textarea, a"));
+}
+
 function startCompareDrag(event) {
   if (!selectedPhoto() || event.button !== 0) {
     return;
@@ -991,6 +1238,7 @@ function drawComparison() {
   dom.compareHandle.classList.toggle("hidden", !showImage);
   dom.loadingOverlay.classList.toggle("hidden", !previewLoading);
   dom.dropZone.classList.toggle("is-loading", previewLoading);
+  updateZoomControls();
   if (previewLoading) {
     compareFrame = null;
     return;
@@ -1001,9 +1249,14 @@ function drawComparison() {
     return;
   }
 
-  const fit = fitInside(processedPreview.width, processedPreview.height, cssWidth - 34, cssHeight - 34);
-  const drawX = Math.round((cssWidth - fit.width) / 2);
-  const drawY = Math.round((cssHeight - fit.height) / 2);
+  const baseFit = fitInside(processedPreview.width, processedPreview.height, cssWidth - 34, cssHeight - 34);
+  const fit = {
+    width: Math.round(baseFit.width * zoomScale),
+    height: Math.round(baseFit.height * zoomScale)
+  };
+  clampZoomPan(cssWidth, cssHeight, fit.width, fit.height);
+  const drawX = Math.round((cssWidth - fit.width) / 2 + zoomPan.x);
+  const drawY = Math.round((cssHeight - fit.height) / 2 + zoomPan.y);
   const split = clamp(compareSplit, 0, 1);
   const splitX = drawX + fit.width * split;
   compareFrame = { x: drawX, y: drawY, width: fit.width, height: fit.height };
