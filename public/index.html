@@ -41,9 +41,8 @@
             </div>
           </div>
 
-          <div class="canvas-tools" aria-label="이미지 회전">
-            <button class="tool-button" id="rotateLeftButton" type="button">↶ 좌회전</button>
-            <button class="tool-button" id="rotateRightButton" type="button">우회전 ↷</button>
+          <div class="canvas-tools" aria-label="이미지 도구">
+            <button class="tool-button icon-tool" id="rotateButton" type="button" aria-label="이미지 회전" title="이미지 회전">↶</button>
           </div>
 
           <div class="thumbnail-panel">
@@ -62,6 +61,7 @@
               <label class="field">
                 <span>스타일</span>
                 <select id="styleSelect">
+                  <option value="auto">AI 추천</option>
                   <option value="natural">자연스럽게</option>
                   <option value="bright">밝고 깨끗하게</option>
                   <option value="vivid">선명하게</option>
@@ -84,6 +84,11 @@
               </label>
               <p class="smart-summary" id="smartSummary">스마트 보정 대기</p>
             </div>
+          </details>
+
+          <details>
+            <summary>세부 설정값</summary>
+            <div class="detail-grid" id="detailGrid"></div>
           </details>
         </aside>
 

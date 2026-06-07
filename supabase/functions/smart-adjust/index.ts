@@ -1,4 +1,24 @@
 const ALLOWED_PRESETS = ["natural", "portrait", "cinematic", "food", "product", "night"];
+const ALLOWED_STYLES = [
+  "natural",
+  "bright",
+  "vivid",
+  "soft",
+  "warm",
+  "cool",
+  "instagram",
+  "cafe",
+  "travel",
+  "cinematic",
+  "film",
+  "moody",
+  "portrait",
+  "product",
+  "food",
+  "space",
+  "night",
+  "mono"
+];
 
 const STYLES: Record<string, string> = {
   natural: "Natural professional photo retouching. Preserve the original mood, clean contrast, balanced color.",
@@ -22,6 +42,7 @@ const STYLES: Record<string, string> = {
 };
 
 type Adjustment = {
+  styleKey?: string;
   presetKey?: string;
   sceneName?: string;
   reason?: string;
@@ -53,8 +74,11 @@ Deno.serve(async (request) => {
   try {
     const body = await request.json().catch(() => ({}));
     const imageDataUrl = String(body.imageDataUrl || "");
-    const styleKey = String(body.style || "natural");
-    const stylePrompt = STYLES[styleKey] || STYLES.natural;
+    const styleKey = String(body.style || "auto");
+    const requestedStyleKey = styleKey === "auto" || STYLES[styleKey] ? styleKey : "auto";
+    const stylePrompt = requestedStyleKey === "auto"
+      ? "AI recommendation mode. Choose the best styleKey from the allowed style list after analyzing the photo. Do not blindly use natural; pick a useful visual direction."
+      : STYLES[requestedStyleKey] || STYLES.natural;
 
     if (!imageDataUrl.startsWith("data:image/")) {
       return jsonResponse({ error: "imageDataUrl is required" }, 400, corsHeaders);
@@ -75,7 +99,7 @@ Deno.serve(async (request) => {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify(buildOpenAiPayload(imageDataUrl, stylePrompt))
+      body: JSON.stringify(buildOpenAiPayload(imageDataUrl, stylePrompt, requestedStyleKey))
     });
 
     const responseText = await response.text();
@@ -94,7 +118,7 @@ Deno.serve(async (request) => {
   }
 });
 
-function buildOpenAiPayload(imageDataUrl: string, stylePrompt: string) {
+function buildOpenAiPayload(imageDataUrl: string, stylePrompt: string, requestedStyleKey: string) {
   return {
     model: Deno.env.get("OPENAI_MODEL") || "gpt-4.1-mini",
     input: [
@@ -106,7 +130,12 @@ function buildOpenAiPayload(imageDataUrl: string, stylePrompt: string) {
             text: [
               "You are a professional photo retoucher.",
               "Analyze this photo and return JSON only.",
+              `Style mode: ${requestedStyleKey === "auto" ? "AI must choose the style" : "User provided a style direction"}`,
               `Goal style: ${stylePrompt}`,
+              `Allowed styleKey values: ${ALLOWED_STYLES.join(", ")}`,
+              requestedStyleKey === "auto"
+                ? "Pick the most suitable styleKey for the image content, lighting, subject, and mood."
+                : `Return styleKey as ${requestedStyleKey} unless it would clearly make the photo worse.`,
               "Choose visible, professional Lightroom-like values. The before/after difference should be clearly noticeable but still tasteful.",
               "Avoid fake HDR, crushed blacks, clipped highlights, excessive saturation, and skin tone damage.",
               "For ordinary photos, prefer strength 78-92, contrast 10-28, saturation 6-22, clarity 16-32 unless the scene requires restraint.",
@@ -131,6 +160,7 @@ function buildOpenAiPayload(imageDataUrl: string, stylePrompt: string) {
           type: "object",
           additionalProperties: false,
           properties: {
+            styleKey: { type: "string", enum: ALLOWED_STYLES },
             presetKey: { type: "string", enum: ALLOWED_PRESETS },
             sceneName: { type: "string" },
             reason: { type: "string" },
@@ -143,7 +173,7 @@ function buildOpenAiPayload(imageDataUrl: string, stylePrompt: string) {
             vignette: intSchema(0, 100),
             grain: intSchema(0, 50)
           },
-          required: ["presetKey", "sceneName", "reason", "strength", "exposure", "contrast", "warmth", "saturation", "clarity", "vignette", "grain"]
+          required: ["styleKey", "presetKey", "sceneName", "reason", "strength", "exposure", "contrast", "warmth", "saturation", "clarity", "vignette", "grain"]
         }
       }
     },
@@ -195,6 +225,7 @@ function extractJson(text: string) {
 function normalizeAdjustment(raw: Adjustment) {
   return {
     source: "SUPABASE_AI",
+    styleKey: ALLOWED_STYLES.includes(String(raw.styleKey)) ? String(raw.styleKey) : "natural",
     presetKey: ALLOWED_PRESETS.includes(String(raw.presetKey)) ? raw.presetKey : "natural",
     sceneName: String(raw.sceneName || "AI 자동"),
     reason: String(raw.reason || "AI가 사진 분위기에 맞춰 보정값을 골랐습니다."),

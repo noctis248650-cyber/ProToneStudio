@@ -351,7 +351,7 @@ button:disabled {
 
 .canvas-tools {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
 }
 
@@ -364,6 +364,14 @@ button:disabled {
   background: linear-gradient(#252b36, #171c25);
   cursor: pointer;
   transition: border-color 0.14s ease, transform 0.14s ease;
+}
+
+.icon-tool {
+  width: 38px;
+  min-height: 34px;
+  padding: 0;
+  font-size: 1.2rem;
+  line-height: 1;
 }
 
 .tool-button:hover {
@@ -449,6 +457,31 @@ select {
   background: #12161e;
   font-size: 0.86rem;
   line-height: 1.4;
+}
+
+.detail-grid {
+  display: grid;
+  gap: 6px;
+  padding: 10px 2px 4px;
+}
+
+.detail-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  background: #12161e;
+  font-size: 0.8rem;
+}
+
+.detail-row output {
+  color: var(--text);
+  text-align: right;
 }
 
 .thumbnail-panel {
@@ -592,10 +625,6 @@ select {
   }
 
   .canvas-tools {
-    justify-content: stretch;
-  }
-
-  .tool-button {
-    flex: 1;
+    justify-content: flex-start;
   }
 }

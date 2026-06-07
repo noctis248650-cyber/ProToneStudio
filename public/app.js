@@ -9,14 +9,15 @@ const dom = {
   styleSelect: document.querySelector("#styleSelect"),
   saveButton: document.querySelector("#saveButton"),
   saveAllButton: document.querySelector("#saveAllButton"),
-  rotateLeftButton: document.querySelector("#rotateLeftButton"),
-  rotateRightButton: document.querySelector("#rotateRightButton"),
+  rotateButton: document.querySelector("#rotateButton"),
   smartSummary: document.querySelector("#smartSummary"),
+  detailGrid: document.querySelector("#detailGrid"),
   fileList: document.querySelector("#fileList"),
   imageCount: document.querySelector("#imageCount")
 };
 
 const DEFAULT_SETTINGS = Object.freeze({
+  styleKey: "natural",
   presetKey: "natural",
   strength: 72,
   exposure: 0,
@@ -29,6 +30,28 @@ const DEFAULT_SETTINGS = Object.freeze({
   autoWhiteBalance: true,
   autoTone: true
 });
+
+const STYLE_LABELS = {
+  auto: "AI 추천",
+  natural: "자연스럽게",
+  bright: "밝고 깨끗하게",
+  vivid: "선명하게",
+  soft: "부드럽게",
+  warm: "따뜻하게",
+  cool: "차갑게",
+  instagram: "인스타 감성",
+  cafe: "카페 감성",
+  travel: "여행 사진",
+  cinematic: "시네마틱",
+  film: "필름 감성",
+  moody: "무드 있게",
+  portrait: "인물/셀카",
+  product: "제품 사진",
+  food: "음식 사진",
+  space: "공간/부동산",
+  night: "야간 사진",
+  mono: "흑백"
+};
 
 const STYLE_BIAS = {
   natural: { exposure: 0, contrast: 0, warmth: 0, saturation: 0, clarity: 0, vignette: 0 },
@@ -113,8 +136,7 @@ function bindEvents() {
   dom.dropZone.addEventListener("pointercancel", stopCompareDrag);
   dom.saveButton.addEventListener("click", saveCurrentImage);
   dom.saveAllButton.addEventListener("click", saveAllImages);
-  dom.rotateLeftButton.addEventListener("click", () => rotateSelectedPhoto(-90));
-  dom.rotateRightButton.addEventListener("click", () => rotateSelectedPhoto(90));
+  dom.rotateButton.addEventListener("click", () => rotateSelectedPhoto(-90));
   dom.styleSelect.addEventListener("change", () => {
     const photo = selectedPhoto();
     if (!photo) {
@@ -283,8 +305,7 @@ function setButtonsEnabled(enabled) {
   const hasAny = photos.length > 0 && enabled;
   dom.saveButton.disabled = !hasPhoto;
   dom.saveAllButton.disabled = !hasAny;
-  dom.rotateLeftButton.disabled = !hasPhoto;
-  dom.rotateRightButton.disabled = !hasPhoto;
+  dom.rotateButton.disabled = !hasPhoto;
 }
 
 function createThumbnailDataUrl(photo) {
@@ -310,6 +331,7 @@ async function removePhoto(index) {
     setAiStatus("idle", "AI 대기");
     setStatus("준비됨");
     setSummary("스마트 보정 대기");
+    updateControlsFromSettings();
     renderFileList();
     drawComparison();
     return;
@@ -368,7 +390,7 @@ async function applySmartAdjustment() {
     settings = normalizeSettings(aiResult);
     photo.smartBase = cloneSettings(settings);
     photo.settings = cloneSettings(settings);
-    photo.smartSummary = `${aiResult.sceneName || "AI 자동"} · ${aiResult.reason || "사진에 맞는 보정값을 적용했습니다."} · ${formatSettingsDigest(settings)}`;
+    photo.smartSummary = buildSmartSummary(aiResult, settings);
     setSummary(photo.smartSummary);
     setAiStatus("ready", "AI 연결됨");
     setStatus("AI 보정 적용됨");
@@ -377,7 +399,7 @@ async function applySmartAdjustment() {
     settings = normalizeSettings(localResult);
     photo.smartBase = cloneSettings(settings);
     photo.settings = cloneSettings(settings);
-    photo.smartSummary = `${localResult.sceneName} · ${localResult.reason} · ${formatSettingsDigest(settings)}`;
+    photo.smartSummary = buildSmartSummary(localResult, settings);
     setSummary(aiApiUnavailable ? `${photo.smartSummary} · AI API 연결 실패로 로컬 보정으로 전환됨` : `${photo.smartSummary} (로컬 분석)`);
     setAiStatus("offline", "AI 연결안됨");
     setStatus("로컬 스마트 보정 적용됨");
@@ -402,13 +424,14 @@ async function requestAiAdjustment(photo) {
   const supabase = getSupabaseConfig();
   const canvas = createSourceCanvas(photo, 960);
   const imageDataUrl = canvas.toDataURL("image/jpeg", 0.82);
+  const requestedStyle = getRequestedStyleKey();
   try {
     const response = await fetch(`${supabase.url}/functions/v1/smart-adjust`, {
       method: "POST",
       headers: {
         "Content-Type": "text/plain"
       },
-      body: JSON.stringify({ imageDataUrl, style: dom.styleSelect.value })
+      body: JSON.stringify({ imageDataUrl, style: requestedStyle })
     });
 
     if (!response.ok) {
@@ -438,7 +461,6 @@ async function buildLocalSmartAdjustment(photo) {
   const canvas = createSourceCanvas(photo, 900);
   const context = canvas.getContext("2d", { willReadFrequently: true });
   const stats = analyzeImageData(context.getImageData(0, 0, canvas.width, canvas.height), 10);
-  const bias = STYLE_BIAS[dom.styleSelect.value] || STYLE_BIAS.natural;
 
   const under = stats.avgL < 108;
   const over = stats.avgL > 178;
@@ -463,11 +485,16 @@ async function buildLocalSmartAdjustment(photo) {
     sceneName = "밝은 제품/공간 사진";
   }
 
+  const requestedStyle = getRequestedStyleKey();
+  const styleKey = requestedStyle === "auto" ? recommendLocalStyleKey(stats, presetKey) : requestedStyle;
+  const bias = STYLE_BIAS[styleKey] || STYLE_BIAS.natural;
+
   const result = {
     source: "LOCAL",
+    styleKey,
     presetKey,
     sceneName,
-    reason: "브라우저에서 밝기와 색 균형을 판단해 자연스러운 기본값을 골랐습니다.",
+    reason: `브라우저에서 장면을 분석해 ${getStyleLabel(styleKey)} 방향의 보정값을 골랐습니다.`,
     strength: 74,
     exposure: under ? 18 : over ? -12 : Math.round((142 - stats.avgL) * 0.22),
     contrast: lowContrast ? 18 : stats.contrastSpan > 152 ? -4 : 8,
@@ -486,7 +513,11 @@ async function buildLocalSmartAdjustment(photo) {
 }
 
 function normalizeSettings(raw) {
+  const requestedStyle = getRequestedStyleKey();
+  const rawStyle = String(raw.styleKey || "");
+  const styleKey = STYLE_BIAS[rawStyle] ? rawStyle : requestedStyle === "auto" ? "natural" : requestedStyle;
   const normalized = {
+    styleKey,
     presetKey: String(raw.presetKey || "natural"),
     strength: clampInt(raw.strength, 0, 100, DEFAULT_SETTINGS.strength),
     exposure: clampInt(raw.exposure, -100, 100),
@@ -500,7 +531,44 @@ function normalizeSettings(raw) {
     autoTone: true
   };
 
-  return enforceVisibleSmartGrade(normalized, dom.styleSelect.value);
+  return enforceVisibleSmartGrade(normalized, styleKey);
+}
+
+function getRequestedStyleKey() {
+  const key = String(dom.styleSelect.value || "auto");
+  return key === "auto" || STYLE_BIAS[key] ? key : "auto";
+}
+
+function getStyleLabel(styleKey) {
+  return STYLE_LABELS[styleKey] || STYLE_LABELS.natural;
+}
+
+function recommendLocalStyleKey(stats, presetKey) {
+  if (presetKey === "food") {
+    return "food";
+  }
+  if (presetKey === "night") {
+    return "night";
+  }
+  if (presetKey === "product") {
+    return "bright";
+  }
+  if (stats.avgL > 155 && stats.saturation < 38) {
+    return "space";
+  }
+  if (stats.saturation > 52 && stats.contrastSpan > 112) {
+    return "travel";
+  }
+  if (stats.contrastSpan > 145 && stats.avgL < 138) {
+    return "cinematic";
+  }
+  if (stats.avgR > stats.avgB + 12) {
+    return "cafe";
+  }
+  if (stats.contrastSpan < 82) {
+    return "vivid";
+  }
+  return "natural";
 }
 
 function enforceVisibleSmartGrade(nextSettings, styleKey = "natural") {
@@ -541,12 +609,41 @@ function enforceVisibleSmartGrade(nextSettings, styleKey = "natural") {
   return boosted;
 }
 
-function formatSettingsDigest(nextSettings) {
-  return `강도 ${nextSettings.strength} / 대비 ${nextSettings.contrast} / 색감 ${nextSettings.saturation} / 선명도 ${nextSettings.clarity}`;
+function buildSmartSummary(result, nextSettings) {
+  const scene = result.sceneName || "AI 자동";
+  const reason = result.reason || "사진에 맞는 보정값을 적용했습니다.";
+  const styleLabel = getRequestedStyleKey() === "auto" ? "추천 스타일" : "선택 스타일";
+  return `${scene} · ${styleLabel}: ${getStyleLabel(nextSettings.styleKey)} · ${reason}`;
 }
 
 function updateControlsFromSettings() {
   settings = cloneSettings(settings);
+  renderDetailValues();
+}
+
+function renderDetailValues() {
+  if (!dom.detailGrid) {
+    return;
+  }
+
+  const rows = [
+    ["스타일", getStyleLabel(settings.styleKey)],
+    ["강도", settings.strength],
+    ["노출", settings.exposure],
+    ["대비", settings.contrast],
+    ["온도", settings.warmth],
+    ["색감", settings.saturation],
+    ["선명도", settings.clarity],
+    ["비네팅", settings.vignette],
+    ["필름입자", settings.grain]
+  ];
+
+  dom.detailGrid.replaceChildren(...rows.map(([label, value]) => {
+    const row = document.createElement("div");
+    row.className = "detail-row";
+    row.innerHTML = `<span>${label}</span><output>${value}</output>`;
+    return row;
+  }));
 }
 
 function renderSelected() {
