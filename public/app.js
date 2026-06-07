@@ -1065,7 +1065,7 @@ async function saveCurrentImage() {
     return;
   }
   setStatus("현재 이미지 저장 준비...");
-  await window.savePhoto(photo, settings);
+  await window.savePhoto(photo, settings, { preferShare: true });
   setStatus("현재 이미지 저장됨");
 }
 
@@ -1094,8 +1094,12 @@ async function saveAllImages() {
   setStatus("전체 저장 완료");
 }
 
-async function savePhoto(photo, photoSettings) {
+async function savePhoto(photo, photoSettings, options = {}) {
   const photoExport = await buildPhotoExport(photo, photoSettings);
+  if (options.preferShare && await sharePhotoExports([photoExport])) {
+    return;
+  }
+
   downloadBlob(photoExport.blob, photoExport.fileName);
 }
 
