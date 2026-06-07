@@ -1065,7 +1065,7 @@ async function saveCurrentImage() {
     return;
   }
   setStatus("현재 이미지 저장 준비...");
-  await window.savePhoto(photo, settings, { preferShare: true });
+  await window.savePhoto(photo, settings);
   setStatus("현재 이미지 저장됨");
 }
 
@@ -1075,31 +1075,16 @@ async function saveAllImages() {
   }
 
   setStatus("전체 저장 중...");
-  const exports = [];
   for (let index = 0; index < photos.length; index += 1) {
     const photo = photos[index];
-    exports.push(await buildPhotoExport(photo, cloneSettings(photo.settings || settings)));
+    await window.savePhoto(photo, cloneSettings(photo.settings || settings));
     await wait(240);
-  }
-
-  if (await sharePhotoExports(exports)) {
-    setStatus("전체 저장 공유창 열림");
-    return;
-  }
-
-  for (const photoExport of exports) {
-    downloadBlob(photoExport.blob, photoExport.fileName);
-    await wait(120);
   }
   setStatus("전체 저장 완료");
 }
 
-async function savePhoto(photo, photoSettings, options = {}) {
+async function savePhoto(photo, photoSettings) {
   const photoExport = await buildPhotoExport(photo, photoSettings);
-  if (options.preferShare && await sharePhotoExports([photoExport])) {
-    return;
-  }
-
   downloadBlob(photoExport.blob, photoExport.fileName);
 }
 
@@ -1111,33 +1096,6 @@ async function buildPhotoExport(photo, photoSettings) {
     blob,
     fileName: buildOutputName(photo.name)
   };
-}
-
-async function sharePhotoExports(photoExports) {
-  if (!shouldUseShareSave() || !photoExports.length || typeof File !== "function" || typeof navigator.share !== "function" || typeof navigator.canShare !== "function") {
-    return false;
-  }
-
-  const files = photoExports.map(({ blob, fileName }) => new File([blob], fileName, { type: blob.type || "image/jpeg" }));
-  if (!navigator.canShare({ files })) {
-    return false;
-  }
-
-  try {
-    await navigator.share({
-      files,
-      title: "ProTone Studio",
-      text: "보정한 이미지를 저장합니다."
-    });
-    return true;
-  } catch (error) {
-    return error && error.name === "AbortError";
-  }
-}
-
-function shouldUseShareSave() {
-  const userAgent = navigator.userAgent || "";
-  return /Android|iPhone|iPad|iPod/i.test(userAgent) || (/Macintosh/i.test(userAgent) && navigator.maxTouchPoints > 1);
 }
 
 function downloadBlob(blob, fileName) {
