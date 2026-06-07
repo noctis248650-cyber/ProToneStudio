@@ -67,7 +67,7 @@ button:disabled {
   width: min(1480px, 100%);
   min-height: 100vh;
   margin: 0 auto;
-  padding: 18px;
+  padding: 12px 18px 18px;
 }
 
 .app-header {
@@ -75,10 +75,10 @@ button:disabled {
   top: 0;
   z-index: 20;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 10px 0 14px;
+  padding: 4px 0 8px;
   background: linear-gradient(rgba(15, 17, 21, 0.96), rgba(15, 17, 21, 0.78), transparent);
   backdrop-filter: blur(14px);
 }
@@ -106,6 +106,7 @@ button:disabled {
 
 .primary-actions {
   display: flex;
+  align-items: flex-start;
   justify-content: flex-end;
   gap: 7px;
   flex-wrap: nowrap;
