@@ -86,13 +86,13 @@ button:disabled {
 .brand {
   display: flex;
   align-items: center;
-  min-width: clamp(128px, 18vw, 230px);
+  min-width: clamp(192px, 27vw, 345px);
 }
 
 .brand img {
   display: block;
-  width: clamp(128px, 16vw, 220px);
-  max-height: 58px;
+  width: clamp(192px, 24vw, 330px);
+  max-height: 87px;
   object-fit: contain;
 }
 
