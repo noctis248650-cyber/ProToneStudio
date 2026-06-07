@@ -281,6 +281,7 @@ function persistSelectedSettings() {
 
 function renderFileList() {
   dom.imageCount.textContent = String(photos.length);
+  const scrollLeft = dom.fileList.scrollLeft;
   dom.fileList.replaceChildren();
 
   const addItem = document.createElement("button");
@@ -322,6 +323,15 @@ function renderFileList() {
 
     item.append(selectButton, removeButton);
     dom.fileList.append(item);
+  });
+
+  restoreFileListScroll(scrollLeft);
+}
+
+function restoreFileListScroll(scrollLeft) {
+  dom.fileList.scrollLeft = scrollLeft;
+  requestAnimationFrame(() => {
+    dom.fileList.scrollLeft = scrollLeft;
   });
 }
 
