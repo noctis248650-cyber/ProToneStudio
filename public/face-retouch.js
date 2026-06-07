@@ -686,9 +686,7 @@
       const response = await fetch(`${supabase.url}/functions/v1/detect-faces`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          apikey: supabase.anonKey,
-          Authorization: `Bearer ${supabase.anonKey}`
+          "Content-Type": "text/plain"
         },
         body: JSON.stringify({ imageDataUrl })
       });
@@ -729,7 +727,7 @@
     const config = window.PROTONE_SUPABASE || {};
     const url = String(config.url || "").replace(/\/$/, "");
     const anonKey = String(config.anonKey || "");
-    if (!url || !anonKey || url.includes("YOUR_SUPABASE") || anonKey.includes("YOUR_SUPABASE")) {
+    if (!url || url.includes("YOUR_SUPABASE")) {
       return null;
     }
     return { url, anonKey };
