@@ -9,9 +9,8 @@ const dom = {
   afterButton: document.querySelector("#afterButton"),
   loadingOverlay: document.querySelector("#loadingOverlay"),
   sceneTitle: document.querySelector("#sceneTitle"),
-  statusText: document.querySelector("#statusText"),
-  aiStatus: document.querySelector("#aiStatus"),
   styleSelect: document.querySelector("#styleSelect"),
+  batchButton: document.querySelector("#batchButton"),
   saveButton: document.querySelector("#saveButton"),
   saveAllButton: document.querySelector("#saveAllButton"),
   rotateButton: document.querySelector("#rotateButton"),
@@ -88,6 +87,7 @@ let processedPreview = null;
 let smartInFlight = false;
 let aiApiUnavailable = false;
 let pendingSmartAfterFlight = false;
+let batchInFlight = false;
 let compareSplit = 0.5;
 let compareFrame = null;
 let compareDragging = false;
@@ -109,7 +109,6 @@ function clampInt(value, min, max, fallback = 0) {
 function init() {
   bindEvents();
   setButtonsEnabled(false);
-  setAiStatus("idle", "AI 대기");
   updateControlsFromSettings();
   drawComparison();
 }
@@ -149,6 +148,7 @@ function bindEvents() {
   dom.compareHandle.addEventListener("pointermove", moveCompareDrag);
   dom.compareHandle.addEventListener("pointerup", stopCompareDrag);
   dom.compareHandle.addEventListener("pointercancel", stopCompareDrag);
+  dom.batchButton.addEventListener("click", retouchAllImages);
   dom.saveButton.addEventListener("click", saveCurrentImage);
   dom.saveAllButton.addEventListener("click", saveAllImages);
   dom.rotateButton.addEventListener("click", () => rotateSelectedPhoto(-90));
@@ -327,8 +327,10 @@ function renderFileList() {
 }
 
 function setButtonsEnabled(enabled) {
-  const hasPhoto = Boolean(selectedPhoto()) && enabled;
-  const hasAny = photos.length > 0 && enabled;
+  const canUse = enabled && !batchInFlight;
+  const hasPhoto = Boolean(selectedPhoto()) && canUse;
+  const hasAny = photos.length > 0 && canUse;
+  dom.batchButton.disabled = !hasAny || smartInFlight;
   dom.saveButton.disabled = !hasPhoto;
   dom.saveAllButton.disabled = !hasAny;
   dom.rotateButton.disabled = !hasPhoto;
@@ -393,7 +395,8 @@ function normalizeRotation(value) {
   return ((Math.round(value / 90) * 90) % 360 + 360) % 360;
 }
 
-async function applySmartAdjustment() {
+async function applySmartAdjustment(options = {}) {
+  const silentRender = options.silentRender === true;
   const photo = selectedPhoto();
   if (!photo || smartInFlight) {
     if (smartInFlight) {
@@ -407,7 +410,6 @@ async function applySmartAdjustment() {
   }
 
   smartInFlight = true;
-  setAiStatus("busy", "AI 분석중");
   setButtonsEnabled(true);
   updateSceneTitle("분석 중...");
   showLoading(true);
@@ -423,7 +425,6 @@ async function applySmartAdjustment() {
     photo.smartSummary = buildSmartSummary(aiResult, settings);
     updateSceneTitle(photo.sceneName);
     setSummary(photo.smartSummary);
-    setAiStatus("ready", "AI 연결됨");
     setStatus("AI 보정 적용됨");
   } catch (error) {
     const localResult = await buildLocalSmartAdjustment(photo);
@@ -434,18 +435,58 @@ async function applySmartAdjustment() {
     photo.smartSummary = buildSmartSummary(localResult, settings);
     updateSceneTitle(photo.sceneName);
     setSummary(aiApiUnavailable ? `${photo.smartSummary} · AI API 연결 실패로 로컬 보정으로 전환됨` : `${photo.smartSummary} (로컬 분석)`);
-    setAiStatus("offline", "AI 연결안됨");
     setStatus("로컬 스마트 보정 적용됨");
   } finally {
     smartInFlight = false;
     setButtonsEnabled(true);
     updateControlsFromSettings();
     renderFileList();
-    renderSelected();
-    if (pendingSmartAfterFlight) {
+    if (!silentRender) {
+      renderSelected();
+    }
+    if (!silentRender && pendingSmartAfterFlight) {
       pendingSmartAfterFlight = false;
       void applySmartAdjustment();
     }
+  }
+}
+
+async function retouchAllImages() {
+  if (!photos.length || batchInFlight) {
+    return;
+  }
+
+  batchInFlight = true;
+  const originalLabel = dom.batchButton.textContent;
+  dom.batchButton.textContent = "보정 중...";
+  setButtonsEnabled(true);
+  showLoading(true);
+  setSummary("첨부한 모든 이미지를 순서대로 스마트 보정하고 있습니다.");
+
+  try {
+    for (let index = 0; index < photos.length; index += 1) {
+      selectedIndex = index;
+      const photo = selectedPhoto();
+      settings = cloneSettings(photo.settings || DEFAULT_SETTINGS);
+      compareSplit = 0.5;
+      updateControlsFromSettings();
+      renderFileList();
+      updateSceneTitle(`전체 보정 중 ${index + 1}/${photos.length}`);
+      await applySmartAdjustment({ silentRender: true });
+      await wait(80);
+    }
+
+    selectedIndex = 0;
+    settings = cloneSettings(photos[0].settings || DEFAULT_SETTINGS);
+    updateControlsFromSettings();
+    renderFileList();
+    updateSceneTitle(photos[0].sceneName || "전체 보정 완료");
+    setSummary(photos[0].smartSummary || "전체 보정 완료");
+    renderSelected();
+  } finally {
+    batchInFlight = false;
+    dom.batchButton.textContent = originalLabel;
+    setButtonsEnabled(true);
   }
 }
 
@@ -701,7 +742,6 @@ function renderSelected() {
     processedPreview = processCanvas(originalPreview, settings);
     previewLoading = false;
     drawComparison();
-    setStatus("보정 완료");
   });
 }
 
@@ -1063,8 +1103,8 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function setStatus(text) {
-  dom.statusText.textContent = text;
+function setStatus(_text) {
+  // 상태 표시는 장면명과 스마트 보정 설명으로 통합합니다.
 }
 
 function updateSceneTitle(text) {
@@ -1080,10 +1120,8 @@ function setSummary(text) {
   dom.smartSummary.textContent = text;
 }
 
-function setAiStatus(mode, text) {
-  dom.aiStatus.classList.remove("is-idle", "is-busy", "is-ready", "is-offline");
-  dom.aiStatus.classList.add(`is-${mode}`);
-  dom.aiStatus.textContent = text;
+function setAiStatus(_mode, _text) {
+  // AI 연결 상태 뱃지는 화면에서 제거했습니다.
 }
 
 init();

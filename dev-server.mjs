@@ -21,7 +21,7 @@ const types = {
 createServer(async (request, response) => {
   try {
     const url = new URL(request.url || "/", `http://localhost:${port}`);
-    const pathname = url.pathname === "/" ? "/index.html" : url.pathname;
+    const pathname = url.pathname === "/" ? "/index.html" : decodeURIComponent(url.pathname);
     const safePath = normalize(pathname).replace(/^(\.\.[/\\])+/, "");
     const filePath = join(root, safePath);
     const body = await readFile(filePath);

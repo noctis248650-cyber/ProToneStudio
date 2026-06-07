@@ -11,11 +11,10 @@
     <div class="app-shell">
       <header class="app-header">
         <div class="brand">
-          <span>AI PHOTO RETOUCH</span>
-          <h1>프로톤 스튜디오</h1>
+          <img src="./HH%20STUDIO.png" alt="HH STUDIO" />
         </div>
         <nav class="primary-actions" aria-label="주요 작업">
-          <span class="ai-indicator" id="aiStatus" aria-live="polite">AI 대기</span>
+          <button class="action-button batch-action" id="batchButton" type="button" title="첨부한 모든 이미지 일괄 보정">전체 보정</button>
           <button class="action-button" id="saveButton" type="button">현재 저장</button>
           <button class="action-button" id="saveAllButton" type="button">전체 저장</button>
         </nav>
@@ -25,7 +24,6 @@
         <section class="workspace-card preview-card">
           <div class="preview-toolbar">
             <span class="scene-title" id="sceneTitle">이미지를 올려주세요</span>
-            <span class="status-pill" id="statusText">준비됨</span>
           </div>
 
           <div class="canvas-stage" id="dropZone">

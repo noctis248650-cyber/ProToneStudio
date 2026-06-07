@@ -84,10 +84,18 @@ button:disabled {
 }
 
 .brand {
-  min-width: 220px;
+  display: flex;
+  align-items: center;
+  min-width: clamp(128px, 18vw, 230px);
 }
 
-.brand span,
+.brand img {
+  display: block;
+  width: clamp(128px, 16vw, 220px);
+  max-height: 58px;
+  object-fit: contain;
+}
+
 .eyebrow {
   display: block;
   color: var(--muted);
@@ -96,19 +104,11 @@ button:disabled {
   line-height: 1;
 }
 
-.brand h1 {
-  margin: 4px 0 0;
-  font-family: var(--font-title);
-  font-size: clamp(1.5rem, 3vw, 2.3rem);
-  line-height: 1;
-  letter-spacing: 0;
-}
-
 .primary-actions {
   display: flex;
   justify-content: flex-end;
   gap: 7px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .action-button,
@@ -161,13 +161,19 @@ button:disabled {
 .action-button,
 .icon-action,
 .wide-action {
-  min-height: 34px;
-  font-size: 0.8rem;
+  min-height: 30px;
+  font-size: 0.74rem;
 }
 
 .action-button,
 .wide-action {
-  padding: 0 12px;
+  padding: 0 10px;
+}
+
+.batch-action {
+  color: #071011;
+  border-color: rgba(188, 239, 235, 0.72);
+  background: linear-gradient(#bcefeb, #7ccbc5);
 }
 
 .action-button.primary,
@@ -270,7 +276,6 @@ button:disabled {
   font-size: 0.95rem;
 }
 
-.status-pill,
 .thumbnail-header > span:last-child {
   display: inline-flex;
   align-items: center;
@@ -708,7 +713,7 @@ select {
 
   .primary-actions {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .layout {
@@ -725,10 +730,6 @@ select {
 
   .preview-toolbar {
     align-items: flex-start;
-  }
-
-  .ai-indicator {
-    max-width: none;
   }
 
   .add-thumb,
