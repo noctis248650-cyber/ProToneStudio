@@ -190,6 +190,7 @@
     state.boundButtons.add(button);
     button.type = button.type || "button";
     button.setAttribute("aria-haspopup", "dialog");
+    button.dataset.faceRetouchBound = "true";
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -201,9 +202,25 @@
 
   async function togglePanel(anchor) {
     const photo = getCurrentPhoto();
-    const analysis = await ensureFaceAnalysis(photo, false, true);
+    state.detecting = true;
+    syncAllButtons();
+    let analysis = { faces: [] };
+    try {
+      analysis = await ensureFaceAnalysis(photo, false);
+    } catch (error) {
+      console.warn("Face retouch analysis failed", error);
+      if (typeof window.setSummary === "function") {
+        window.setSummary("얼굴 분석 중 오류가 발생했습니다. 다른 사진으로 다시 시도해 주세요.");
+      }
+    } finally {
+      state.detecting = false;
+      syncAllButtons();
+    }
     if (!photo || !analysis.faces.length) {
       closePanel();
+      if (typeof window.setSummary === "function") {
+        window.setSummary("얼굴을 찾지 못했습니다. 정면 얼굴이 잘 보이는 사진에서 얼굴 보정을 사용할 수 있습니다.");
+      }
       return;
     }
 
@@ -428,7 +445,7 @@
 
     const photo = getCurrentPhoto();
     const faceCount = getFaceAnalysis(photo)?.faces.length || 0;
-    const canUse = Boolean(photo);
+    const canUse = Boolean(photo && faceCount > 0 && !state.detecting);
 
     button.disabled = !canUse;
     button.classList.toggle("is-active", Boolean(state.panel && !state.panel.hidden));
@@ -441,7 +458,7 @@
       ? "얼굴 감지 중"
       : canUse
         ? faceCount > 0 ? `얼굴 보정 (${faceCount}개 감지됨)` : "얼굴 보정"
-        : "사진을 올리면 얼굴 보정을 사용할 수 있습니다";
+        : photo ? "얼굴을 감지하지 못했습니다" : "사진을 올리면 얼굴 보정을 사용할 수 있습니다";
   }
 
   function startPhotoPolling() {
@@ -529,7 +546,7 @@
     }
   }
 
-  async function ensureFaceAnalysis(photo, allowCached = true, useFallbackCandidate = false) {
+  async function ensureFaceAnalysis(photo, allowCached = true) {
     if (!photo || typeof window.createSourceCanvas !== "function") {
       return { faces: [], sourceWidth: 0, sourceHeight: 0, rotation: 0 };
     }
@@ -542,10 +559,7 @@
 
     const sourceCanvas = window.createSourceCanvas(photo, DETECT_MAX_EDGE);
     const detected = await detectFaces(sourceCanvas);
-    let faces = normalizeFaces(detected, sourceCanvas.width, sourceCanvas.height);
-    if (!faces.length && useFallbackCandidate) {
-      faces = normalizeFaces([buildPrimaryFaceCandidate(sourceCanvas.width, sourceCanvas.height)], sourceCanvas.width, sourceCanvas.height);
-    }
+    const faces = normalizeFaces(detected, sourceCanvas.width, sourceCanvas.height);
     const analysis = {
       rotation,
       sourceWidth: sourceCanvas.width,
@@ -560,19 +574,6 @@
 
   function getFaceAnalysis(photo) {
     return photo?.__faceRetouchAnalysis || null;
-  }
-
-  function buildPrimaryFaceCandidate(width, height) {
-    const portraitish = height >= width * 0.9;
-    const faceWidth = width * (portraitish ? 0.42 : 0.28);
-    const faceHeight = height * (portraitish ? 0.38 : 0.34);
-    return {
-      x: (width - faceWidth) * 0.5,
-      y: height * (portraitish ? 0.17 : 0.2),
-      width: faceWidth,
-      height: faceHeight,
-      confidence: 0.3
-    };
   }
 
   async function detectFaces(canvas) {
@@ -700,6 +701,13 @@
       }
     }
 
+    if (!components.length) {
+      const aggregate = buildSkinAggregateCandidate(mask, width, height, scale);
+      if (aggregate) {
+        components.push(aggregate);
+      }
+    }
+
     return dedupeFaces(components)
       .sort((a, b) => (b.width * b.height) - (a.width * a.height))
       .slice(0, 12);
@@ -711,6 +719,57 @@
       visited[point] = 1;
       stack[stackSize++] = point;
     }
+  }
+
+  function buildSkinAggregateCandidate(mask, width, height, scale) {
+    const leftLimit = Math.round(width * 0.16);
+    const rightLimit = Math.round(width * 0.84);
+    const topLimit = Math.round(height * 0.08);
+    const bottomLimit = Math.round(height * 0.82);
+
+    let count = 0;
+    let minX = width;
+    let maxX = 0;
+    let minY = height;
+    let maxY = 0;
+
+    for (let y = topLimit; y < bottomLimit; y += 1) {
+      for (let x = leftLimit; x < rightLimit; x += 1) {
+        if (!mask[y * width + x]) {
+          continue;
+        }
+
+        count += 1;
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+      }
+    }
+
+    const scanArea = Math.max(1, (rightLimit - leftLimit) * (bottomLimit - topLimit));
+    const skinRatio = count / scanArea;
+    if (count < 220 || skinRatio < 0.006) {
+      return null;
+    }
+
+    const boxWidth = maxX - minX + 1;
+    const boxHeight = maxY - minY + 1;
+    const aspect = boxWidth / Math.max(1, boxHeight);
+    if (boxWidth < 20 || boxHeight < 24 || aspect < 0.34 || aspect > 2.35) {
+      return null;
+    }
+
+    const paddingX = boxWidth * 0.32;
+    const paddingTop = boxHeight * 0.28;
+    const paddingBottom = boxHeight * 0.18;
+    return {
+      x: Math.max(0, (minX - paddingX) / scale),
+      y: Math.max(0, (minY - paddingTop) / scale),
+      width: Math.min(width, boxWidth + paddingX * 2) / scale,
+      height: Math.min(height, boxHeight + paddingTop + paddingBottom) / scale,
+      confidence: clamp(0.34 + skinRatio * 18, 0.34, 0.72)
+    };
   }
 
   function dedupeFaces(faces) {
