@@ -48,7 +48,8 @@
     renderFrame: 0,
     processingPhoto: null,
     lastPhoto: null,
-    lastAnchor: null
+    lastAnchor: null,
+    lastDebug: "초기화됨"
   };
 
   window.ProToneFaceRetouch = {
@@ -57,6 +58,7 @@
     closePanel,
     detectCurrentPhoto,
     getOptions,
+    getDebugInfo,
     openPanel,
     refreshPreview,
     reset,
@@ -203,6 +205,7 @@
 
   async function togglePanel(anchor) {
     const photo = getCurrentPhoto();
+    debug("button_click", { hasPhoto: Boolean(photo), sceneName: photo?.sceneName || "", summary: photo?.smartSummary || "" }, true);
     state.detecting = true;
     syncAllButtons();
     let analysis = { faces: [] };
@@ -220,7 +223,7 @@
     if (!photo || !analysis.faces.length) {
       closePanel();
       if (typeof window.setSummary === "function") {
-        window.setSummary("얼굴을 찾지 못했습니다. 정면 얼굴이 잘 보이는 사진에서 얼굴 보정을 사용할 수 있습니다.");
+        window.setSummary(`얼굴을 찾지 못했습니다. ${state.lastDebug}`);
       }
       return;
     }
@@ -510,6 +513,7 @@
     const token = ++state.detectToken;
 
     if (!photo) {
+      debug("detect_skip_no_photo", {}, false);
       state.active = false;
       state.selectionMode = false;
       hideFaceOverlay();
@@ -523,6 +527,7 @@
 
     try {
       const analysis = await ensureFaceAnalysis(photo, true);
+      debug("detect_done", { faces: analysis.faces.length, sourceWidth: analysis.sourceWidth, sourceHeight: analysis.sourceHeight }, false);
       if (token !== state.detectToken) {
         return analysis;
       }
@@ -549,6 +554,7 @@
 
   async function ensureFaceAnalysis(photo, allowCached = true) {
     if (!photo || typeof window.createSourceCanvas !== "function") {
+      debug("analysis_unavailable", { hasPhoto: Boolean(photo), hasCreateSourceCanvas: typeof window.createSourceCanvas === "function" }, true);
       return { faces: [], sourceWidth: 0, sourceHeight: 0, rotation: 0 };
     }
 
@@ -556,22 +562,28 @@
     const cached = getFaceAnalysis(photo);
     if (allowCached && cached && cached.rotation === rotation) {
       if (!cached.faces.length && shouldUsePortraitFallback(photo)) {
+        debug("cache_empty_reset_for_portrait", { sceneName: photo.sceneName || "", summary: photo.smartSummary || "" }, false);
         photo.__faceRetouchAnalysis = null;
       } else {
+        debug("analysis_cache_hit", { faces: cached.faces.length }, false);
         return cached;
       }
     }
 
     const refreshedCached = getFaceAnalysis(photo);
     if (allowCached && refreshedCached && refreshedCached.rotation === rotation) {
+      debug("analysis_cache_hit_refreshed", { faces: refreshedCached.faces.length }, false);
       return refreshedCached;
     }
 
     const sourceCanvas = window.createSourceCanvas(photo, DETECT_MAX_EDGE);
+    debug("analysis_start", { width: sourceCanvas.width, height: sourceCanvas.height, allowCached }, false);
     const detected = await detectFaces(sourceCanvas);
     let faces = normalizeFaces(detected, sourceCanvas.width, sourceCanvas.height);
+    debug("analysis_normalized", { rawFaces: detected.length, faces: faces.length }, false);
     if (!faces.length && shouldUsePortraitFallback(photo)) {
       faces = normalizeFaces([buildPrimaryFaceCandidate(sourceCanvas.width, sourceCanvas.height)], sourceCanvas.width, sourceCanvas.height);
+      debug("portrait_fallback_used", { faces: faces.length, sceneName: photo.sceneName || "", summary: photo.smartSummary || "" }, true);
     }
     const analysis = {
       rotation,
@@ -626,6 +638,7 @@
   async function detectFaces(canvas) {
     const aiFaces = await requestAiFaceDetection(canvas);
     if (aiFaces.length) {
+      debug("ai_faces_used", { faces: aiFaces.length }, true);
       return aiFaces;
     }
 
@@ -634,6 +647,7 @@
         const detector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 24 });
         const nativeFaces = await detector.detect(canvas);
         if (nativeFaces.length) {
+          debug("native_faces_used", { faces: nativeFaces.length }, true);
           return nativeFaces.map((face) => ({
             x: face.boundingBox.x,
             y: face.boundingBox.y,
@@ -644,25 +658,31 @@
         }
       } catch (error) {
         console.warn("FaceDetector unavailable, using local fallback", error);
+        debug("native_face_detector_failed", { message: error instanceof Error ? error.message : String(error) }, false);
       }
     }
 
-    return fallbackDetectFaces(canvas);
+    const fallbackFaces = fallbackDetectFaces(canvas);
+    debug("local_fallback_used", { faces: fallbackFaces.length }, true);
+    return fallbackFaces;
   }
 
   async function requestAiFaceDetection(canvas) {
     if (state.aiApiUnavailable) {
+      debug("ai_skip_unavailable", {}, false);
       return [];
     }
 
     const supabase = getSupabaseConfig();
     if (!supabase) {
       state.aiApiUnavailable = true;
+      debug("ai_skip_no_supabase_config", { hasConfig: Boolean(window.PROTONE_SUPABASE) }, true);
       return [];
     }
 
     try {
       const imageDataUrl = canvas.toDataURL("image/jpeg", 0.82);
+      debug("ai_request_start", { endpoint: `${supabase.url}/functions/v1/detect-faces`, payloadLength: imageDataUrl.length }, false);
       const response = await fetch(`${supabase.url}/functions/v1/detect-faces`, {
         method: "POST",
         headers: {
@@ -675,13 +695,18 @@
 
       if (!response.ok) {
         console.warn("AI face detection failed", response.status);
+        const detail = await response.text().catch(() => "");
+        debug("ai_response_error", { status: response.status, detail: detail.slice(0, 220) }, true);
         return [];
       }
 
       const payload = await response.json();
-      return normalizeAiFaces(payload.faces, canvas.width, canvas.height);
+      const faces = normalizeAiFaces(payload.faces, canvas.width, canvas.height);
+      debug("ai_response_ok", { rawFaces: Array.isArray(payload.faces) ? payload.faces.length : -1, faces: faces.length }, true);
+      return faces;
     } catch (error) {
       console.warn("AI face detection unavailable", error);
+      debug("ai_request_failed", { message: error instanceof Error ? error.message : String(error) }, true);
       return [];
     }
   }
@@ -708,6 +733,40 @@
       return null;
     }
     return { url, anonKey };
+  }
+
+  function getDebugInfo() {
+    const photo = getCurrentPhoto();
+    const analysis = getFaceAnalysis(photo);
+    return {
+      lastDebug: state.lastDebug,
+      aiApiUnavailable: state.aiApiUnavailable,
+      detecting: state.detecting,
+      hasPhoto: Boolean(photo),
+      sceneName: photo?.sceneName || "",
+      smartSummary: photo?.smartSummary || "",
+      faces: analysis?.faces.length || 0,
+      selectedFaces: getSelectedFaceIds(photo).length,
+      hasSupabaseConfig: Boolean(getSupabaseConfig())
+    };
+  }
+
+  function debug(event, detail = {}, visible = false) {
+    const safeDetail = {};
+    for (const [key, value] of Object.entries(detail || {})) {
+      if (typeof value === "string") {
+        safeDetail[key] = value.length > 180 ? `${value.slice(0, 180)}...` : value;
+      } else {
+        safeDetail[key] = value;
+      }
+    }
+
+    state.lastDebug = `${event}: ${JSON.stringify(safeDetail)}`;
+    console.info("[ProToneFaceRetouch]", event, safeDetail);
+
+    if (visible && typeof window.setSummary === "function") {
+      window.setSummary(`얼굴 감지 상태: ${state.lastDebug}`);
+    }
   }
 
   function normalizeFaces(rawFaces, sourceWidth, sourceHeight) {
