@@ -215,18 +215,12 @@
       analysis = await ensureFaceAnalysis(photo, false);
     } catch (error) {
       console.warn("Face retouch analysis failed", error);
-      if (typeof window.setSummary === "function") {
-        window.setSummary("얼굴 분석 중 오류가 발생했습니다. 다른 사진으로 다시 시도해 주세요.");
-      }
     } finally {
       state.detecting = false;
       syncAllButtons();
     }
     if (!photo || !analysis.faces.length) {
       closePanel();
-      if (typeof window.setSummary === "function") {
-        window.setSummary(`얼굴을 찾지 못했습니다. ${state.lastDebug}`);
-      }
       return;
     }
 
@@ -499,9 +493,6 @@
       if (typeof window.renderSelected === "function") {
         window.renderSelected();
       }
-      if (typeof window.setSummary === "function" && state.active && state.options.enabled && getSelectedFaceIds(getCurrentPhoto()).length > 0) {
-        window.setSummary("선택한 얼굴 보정 옵션이 미리보기에 적용되었습니다.");
-      }
     });
   }
 
@@ -765,10 +756,6 @@
 
     state.lastDebug = `${event}: ${JSON.stringify(safeDetail)}`;
     console.info("[ProToneFaceRetouch]", event, safeDetail);
-
-    if (visible && typeof window.setSummary === "function") {
-      window.setSummary(`얼굴 감지 상태: ${state.lastDebug}`);
-    }
   }
 
   function normalizeFaces(rawFaces, sourceWidth, sourceHeight) {
