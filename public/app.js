@@ -20,6 +20,8 @@ const dom = {
   imageCount: document.querySelector("#imageCount")
 };
 
+const IMAGE_PICKER_ACCEPT = "image/jpeg,image/png,image/webp,image/heic,image/heif";
+
 const DEFAULT_SETTINGS = Object.freeze({
   styleKey: "natural",
   presetKey: "natural",
@@ -327,19 +329,9 @@ function renderFileList() {
 }
 
 function openImageLibrary() {
-  dom.fileInput.accept = "image/*";
+  dom.fileInput.accept = IMAGE_PICKER_ACCEPT;
   dom.fileInput.multiple = true;
   dom.fileInput.removeAttribute("capture");
-
-  if (typeof dom.fileInput.showPicker === "function") {
-    try {
-      dom.fileInput.showPicker();
-      return;
-    } catch (error) {
-      console.warn("Image picker fallback", error);
-    }
-  }
-
   dom.fileInput.click();
 }
 
