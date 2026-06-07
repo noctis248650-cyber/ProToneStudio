@@ -111,6 +111,7 @@ function clampInt(value, min, max, fallback = 0) {
 function init() {
   bindEvents();
   setButtonsEnabled(false);
+  renderFileList();
   updateControlsFromSettings();
   drawComparison();
 }
@@ -291,10 +292,6 @@ function renderFileList() {
   dom.fileList.append(addItem);
 
   if (!photos.length) {
-    const empty = document.createElement("div");
-    empty.className = "file-empty";
-    empty.textContent = "이미지를 추가하면 여기에 표시됩니다.";
-    dom.fileList.append(empty);
     return;
   }
 
