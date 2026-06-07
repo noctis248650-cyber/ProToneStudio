@@ -13,6 +13,7 @@
     skinSmoothing: 34,
     wrinkleRemoval: 28,
     blemishSoftening: 18,
+    darkCircleRemoval: 24,
     toneEvenness: 24,
     faceBrightness: 4
   });
@@ -21,6 +22,7 @@
     { key: "skinSmoothing", label: "피부 부드러움", min: 0, max: 100, step: 1 },
     { key: "wrinkleRemoval", label: "주름 완화", min: 0, max: 100, step: 1 },
     { key: "blemishSoftening", label: "잡티 완화", min: 0, max: 100, step: 1 },
+    { key: "darkCircleRemoval", label: "다크서클 완화", min: 0, max: 100, step: 1 },
     { key: "toneEvenness", label: "피부톤 균일", min: 0, max: 100, step: 1 },
     { key: "faceBrightness", label: "얼굴 밝기", min: -30, max: 30, step: 1 }
   ];
@@ -370,8 +372,9 @@
 
     const rect = anchor.getBoundingClientRect();
     const width = Math.min(330, window.innerWidth - 20);
+    const panelHeight = Math.min(state.panel.offsetHeight || 430, window.innerHeight - 20);
     const left = clamp(rect.right - width, 10, Math.max(10, window.innerWidth - width - 10));
-    const top = clamp(rect.bottom + 8, 10, Math.max(10, window.innerHeight - 390));
+    const top = clamp(rect.bottom + 8, 10, Math.max(10, window.innerHeight - panelHeight - 10));
     state.panel.style.left = `${Math.round(left)}px`;
     state.panel.style.top = `${Math.round(top)}px`;
     state.panel.style.width = `${Math.round(width)}px`;
@@ -398,6 +401,7 @@
       skinSmoothing: clampInt(options.skinSmoothing, 0, 100, DEFAULT_OPTIONS.skinSmoothing),
       wrinkleRemoval: clampInt(options.wrinkleRemoval, 0, 100, DEFAULT_OPTIONS.wrinkleRemoval),
       blemishSoftening: clampInt(options.blemishSoftening, 0, 100, DEFAULT_OPTIONS.blemishSoftening),
+      darkCircleRemoval: clampInt(options.darkCircleRemoval, 0, 100, DEFAULT_OPTIONS.darkCircleRemoval),
       toneEvenness: clampInt(options.toneEvenness, 0, 100, DEFAULT_OPTIONS.toneEvenness),
       faceBrightness: clampInt(options.faceBrightness, -30, 30, DEFAULT_OPTIONS.faceBrightness)
     };
@@ -1138,6 +1142,7 @@
     const smoothPower = normalized.skinSmoothing / 100;
     const wrinklePower = normalized.wrinkleRemoval / 100;
     const blemishPower = normalized.blemishSoftening / 100;
+    const darkCirclePower = normalized.darkCircleRemoval / 100;
     const tonePower = normalized.toneEvenness / 100;
     const brightnessOffset = normalized.faceBrightness * 0.68;
 
@@ -1158,7 +1163,9 @@
       const bb = blurData[index + 2];
 
       const mask = skinMask(r, g, b) * faceRegion;
-      if (mask <= 0.02) {
+      const darkCircleRegion = darkCirclePower > 0 ? darkCircleMask(x, y, selectedFaces) * faceRegion : 0;
+      const underEyeMask = darkCircleRegion * underEyeSkinMask(r, g, b);
+      if (mask <= 0.02 && underEyeMask <= 0.02) {
         continue;
       }
 
@@ -1167,10 +1174,13 @@
       const detail = Math.abs(r - br) * 0.28 + Math.abs(g - bg) * 0.42 + Math.abs(b - bb) * 0.3;
       const edgeProtect = 1 - smoothstep(18, 52, detail);
       const baseMask = mask * edgeProtect;
+      const underEyeBaseMask = Math.max(baseMask, underEyeMask * edgeProtect);
 
       const smoothMix = clamp(baseMask * (smoothPower * 0.58 + tonePower * 0.16), 0, 0.68);
       const wrinkleMix = clamp(baseMask * wrinklePower * smoothstep(3, 28, blurLuma - luma) * 0.86, 0, 0.78);
       const blemishMix = clamp(baseMask * blemishPower * blemishMask(r, g, b, br, bg, bb) * 0.68, 0, 0.62);
+      const darkCircleShadow = smoothstep(-4, 34, blurLuma - luma);
+      const darkCircleMix = clamp(underEyeBaseMask * darkCirclePower * (0.34 + darkCircleShadow * 0.92), 0, 0.66);
       const toneMix = clamp(mask * tonePower * 0.24, 0, 0.28);
 
       let nr = mix(r, br, smoothMix);
@@ -1181,19 +1191,29 @@
       ng = mix(ng, bg, wrinkleMix + blemishMix);
       nb = mix(nb, bb, wrinkleMix + blemishMix);
 
+      nr = mix(nr, br, darkCircleMix * 0.58);
+      ng = mix(ng, bg, darkCircleMix * 0.54);
+      nb = mix(nb, bb, darkCircleMix * 0.48);
+
       const targetWarmth = Math.max(0, (br + bg) * 0.5 - bb * 0.18);
       nr = mix(nr, targetWarmth, toneMix * 0.22);
       ng = mix(ng, targetWarmth * 0.9, toneMix * 0.12);
       nb = mix(nb, targetWarmth * 0.82, toneMix * 0.1);
+
+      const darkLift = darkCircleMix * (8 + darkCirclePower * 16) * (1 - smoothstep(142, 218, luma));
+      nr += darkLift * 0.94;
+      ng += darkLift;
+      nb += darkLift * 1.04;
 
       nr += brightnessOffset * mask;
       ng += brightnessOffset * mask;
       nb += brightnessOffset * mask * 0.94;
 
       const textureRestore = 0.18 + smoothstep(0, 100, 100 - normalized.skinSmoothing) * 0.22;
-      data[index] = clampByte(mix(nr, r, textureRestore * mask));
-      data[index + 1] = clampByte(mix(ng, g, textureRestore * mask));
-      data[index + 2] = clampByte(mix(nb, b, textureRestore * mask));
+      const restoreMask = Math.max(mask, darkCircleMix * 0.72);
+      data[index] = clampByte(mix(nr, r, textureRestore * restoreMask));
+      data[index + 1] = clampByte(mix(ng, g, textureRestore * restoreMask));
+      data[index + 2] = clampByte(mix(nb, b, textureRestore * restoreMask));
     }
 
     context.putImageData(imageData, 0, 0);
@@ -1218,9 +1238,36 @@
     return strongest;
   }
 
+  function darkCircleMask(x, y, selectedFaces) {
+    let strongest = 0;
+    for (const face of selectedFaces) {
+      if (face.width <= 0 || face.height <= 0) {
+        continue;
+      }
+
+      const nx = (x - face.x) / face.width;
+      const ny = (y - face.y) / face.height;
+      if (nx < 0.08 || nx > 0.92 || ny < 0.32 || ny > 0.64) {
+        continue;
+      }
+
+      const verticalGate = smoothstep(0.36, 0.43, ny) * (1 - smoothstep(0.56, 0.64, ny));
+      const leftEye = eyeBagMask(nx, ny, 0.35, 0.46);
+      const rightEye = eyeBagMask(nx, ny, 0.65, 0.46);
+      strongest = Math.max(strongest, Math.max(leftEye, rightEye) * verticalGate);
+    }
+    return strongest;
+  }
+
+  function eyeBagMask(nx, ny, centerX, centerY) {
+    const dx = (nx - centerX) / 0.2;
+    const dy = (ny - centerY) / 0.11;
+    return 1 - smoothstep(0.62, 1.12, dx * dx + dy * dy);
+  }
+
   function buildBlurRadius(width, height, options) {
     const base = Math.max(width, height) / 900;
-    const strength = 1 + (options.skinSmoothing + options.wrinkleRemoval + options.blemishSoftening) / 180;
+    const strength = 1 + (options.skinSmoothing + options.wrinkleRemoval + options.blemishSoftening + options.darkCircleRemoval * 0.7) / 200;
     return clamp(base * strength, 1.2, 5.4).toFixed(2);
   }
 
@@ -1228,6 +1275,7 @@
     return options.skinSmoothing > 0 ||
       options.wrinkleRemoval > 0 ||
       options.blemishSoftening > 0 ||
+      options.darkCircleRemoval > 0 ||
       options.toneEvenness > 0 ||
       options.faceBrightness !== 0;
   }
@@ -1252,6 +1300,19 @@
     const chromaCenter = 1 - clamp((Math.abs(cr - 154) + Math.abs(cb - 104)) / 104, 0, 1);
     const lumaWeight = smoothstep(34, 76, luma) * (1 - smoothstep(232, 250, luma));
     return clamp(redBalance * blueDistance * (0.4 + chromaCenter * 0.6) * lumaWeight, 0, 1);
+  }
+
+  function underEyeSkinMask(r, g, b) {
+    const luma = getLuma(r, g, b);
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const fleshLike = r > 28 && g > 22 && b > 18 && r >= g * 0.62 && r >= b * 0.68 && max - min > 4;
+    if (!fleshLike || luma < 28 || luma > 224) {
+      return 0;
+    }
+
+    const shadowWeight = smoothstep(30, 82, luma) * (1 - smoothstep(180, 232, luma));
+    return clamp(Math.max(skinMask(r, g, b), 0.46) * shadowWeight, 0, 1);
   }
 
   function blemishMask(r, g, b, br, bg, bb) {
@@ -1321,6 +1382,8 @@
         color: #eef1f6;
         background: #171c25;
         box-shadow: 0 24px 54px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        max-height: min(520px, calc(100vh - 24px));
+        overflow-y: auto;
       }
 
       .face-retouch-panel[hidden],
