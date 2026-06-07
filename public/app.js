@@ -362,7 +362,7 @@ async function applySmartAdjustment() {
     settings = normalizeSettings(aiResult);
     photo.smartBase = cloneSettings(settings);
     photo.settings = cloneSettings(settings);
-    photo.smartSummary = `${aiResult.sceneName || "AI 자동"} · ${aiResult.reason || "사진에 맞는 보정값을 적용했습니다."}`;
+    photo.smartSummary = `${aiResult.sceneName || "AI 자동"} · ${aiResult.reason || "사진에 맞는 보정값을 적용했습니다."} · ${formatSettingsDigest(settings)}`;
     setSummary(photo.smartSummary);
     setStatus("AI 보정 적용됨");
   } catch (error) {
@@ -370,7 +370,7 @@ async function applySmartAdjustment() {
     settings = normalizeSettings(localResult);
     photo.smartBase = cloneSettings(settings);
     photo.settings = cloneSettings(settings);
-    photo.smartSummary = `${localResult.sceneName} · ${localResult.reason}`;
+    photo.smartSummary = `${localResult.sceneName} · ${localResult.reason} · ${formatSettingsDigest(settings)}`;
     setSummary(aiApiUnavailable ? `${photo.smartSummary} · AI API 연결 실패로 로컬 보정으로 전환됨` : `${photo.smartSummary} (로컬 분석)`);
     setStatus("로컬 스마트 보정 적용됨");
   } finally {
@@ -482,7 +482,7 @@ async function buildLocalSmartAdjustment(photo) {
 }
 
 function normalizeSettings(raw) {
-  return {
+  const normalized = {
     presetKey: String(raw.presetKey || "natural"),
     strength: clampInt(raw.strength, 0, 100, DEFAULT_SETTINGS.strength),
     exposure: clampInt(raw.exposure, -100, 100),
@@ -495,6 +495,38 @@ function normalizeSettings(raw) {
     autoWhiteBalance: typeof raw.autoWhiteBalance === "boolean" ? raw.autoWhiteBalance : dom.autoWhiteBalance.checked,
     autoTone: typeof raw.autoTone === "boolean" ? raw.autoTone : dom.autoTone.checked
   };
+
+  return enforceVisibleSmartGrade(normalized);
+}
+
+function enforceVisibleSmartGrade(nextSettings) {
+  const floors = {
+    natural: { strength: 82, contrast: 12, saturation: 9, clarity: 20 },
+    portrait: { strength: 78, exposure: 5, contrast: -4, warmth: 5, saturation: 6, clarity: 14, vignette: 6 },
+    cinematic: { strength: 84, exposure: -4, contrast: 20, warmth: -6, saturation: -5, clarity: 22, vignette: 16, grain: 4 },
+    food: { strength: 86, exposure: 5, contrast: 16, warmth: 10, saturation: 18, clarity: 22, vignette: 4 },
+    product: { strength: 82, exposure: 8, contrast: 14, warmth: -3, saturation: -4, clarity: 26 },
+    night: { strength: 86, exposure: 8, contrast: 22, warmth: -7, saturation: 7, clarity: 26, vignette: 18, grain: 6 }
+  };
+  const floor = floors[nextSettings.presetKey] || floors.natural;
+  const boosted = cloneSettings(nextSettings);
+
+  boosted.strength = Math.max(boosted.strength, floor.strength || boosted.strength);
+  for (const key of ["exposure", "contrast", "warmth", "saturation", "clarity", "vignette", "grain"]) {
+    if (typeof floor[key] !== "number") {
+      continue;
+    }
+
+    if (Math.abs(boosted[key]) < Math.abs(floor[key])) {
+      boosted[key] = floor[key];
+    }
+  }
+
+  return boosted;
+}
+
+function formatSettingsDigest(nextSettings) {
+  return `강도 ${nextSettings.strength} / 대비 ${nextSettings.contrast} / 색감 ${nextSettings.saturation} / 선명도 ${nextSettings.clarity}`;
 }
 
 function applyPresetLook(key) {
@@ -622,19 +654,19 @@ function processCanvas(sourceCanvas, currentSettings) {
   const stats = analyzeImageData(imageData, 12);
   const strength = currentSettings.strength / 100;
 
-  const autoExposure = currentSettings.autoTone ? clamp((132 - stats.avgL) * 0.16, -16, 16) : 0;
-  const autoContrast = currentSettings.autoTone ? clamp((112 - stats.contrastSpan) * 0.12, -10, 14) : 0;
-  const autoWarmth = currentSettings.autoWhiteBalance ? clamp((stats.avgB - stats.avgR) * 0.08, -10, 10) : 0;
-  const autoGreen = currentSettings.autoWhiteBalance ? clamp((((stats.avgR + stats.avgB) / 2) - stats.avgG) * 0.04, -5, 5) : 0;
+  const autoExposure = currentSettings.autoTone ? clamp((140 - stats.avgL) * 0.2, -20, 22) : 0;
+  const autoContrast = currentSettings.autoTone ? clamp((122 - stats.contrastSpan) * 0.16, -10, 18) : 0;
+  const autoWarmth = currentSettings.autoWhiteBalance ? clamp((stats.avgB - stats.avgR) * 0.1, -14, 14) : 0;
+  const autoGreen = currentSettings.autoWhiteBalance ? clamp((((stats.avgR + stats.avgB) / 2) - stats.avgG) * 0.055, -7, 7) : 0;
 
-  const exposureOffset = (currentSettings.exposure + autoExposure) * 1.08 * strength;
-  const contrastValue = (currentSettings.contrast + autoContrast) * strength;
-  const contrastFactor = 1 + contrastValue * 0.0085;
-  const warmth = (currentSettings.warmth + autoWarmth) * 0.62 * strength;
-  const saturationFactor = 1 + currentSettings.saturation * 0.008 * strength;
-  const clarityFactor = currentSettings.clarity * 0.0032 * strength;
-  const vignettePower = currentSettings.vignette * 0.0045 * strength;
-  const grainPower = currentSettings.grain * 0.55 * strength;
+  const exposureOffset = (currentSettings.exposure + autoExposure) * 1.26;
+  const contrastValue = currentSettings.contrast + autoContrast;
+  const contrastFactor = 1 + contrastValue * 0.0115;
+  const warmth = (currentSettings.warmth + autoWarmth) * 0.74;
+  const saturationFactor = 1 + currentSettings.saturation * 0.0115;
+  const clarityFactor = currentSettings.clarity * 0.0048;
+  const vignettePower = currentSettings.vignette * 0.0055;
+  const grainPower = currentSettings.grain * 0.68;
   const width = output.width;
   const height = output.height;
   const centerX = width * 0.5;

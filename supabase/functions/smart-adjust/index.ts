@@ -95,8 +95,9 @@ function buildOpenAiPayload(imageDataUrl: string, stylePrompt: string) {
               "You are a professional photo retoucher.",
               "Analyze this photo and return JSON only.",
               `Goal style: ${stylePrompt}`,
-              "Choose subtle Lightroom-like values that preserve the original image and make it look professionally color graded.",
+              "Choose visible, professional Lightroom-like values. The before/after difference should be clearly noticeable but still tasteful.",
               "Avoid fake HDR, crushed blacks, clipped highlights, excessive saturation, and skin tone damage.",
+              "For ordinary photos, prefer strength 78-92, contrast 10-28, saturation 6-22, clarity 16-32 unless the scene requires restraint.",
               "sceneName and reason must be Korean.",
               "Return integer slider values only."
             ].join("\n")
