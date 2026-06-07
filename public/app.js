@@ -10,11 +10,7 @@ const dom = {
   smartButton: document.querySelector("#smartButton"),
   saveButton: document.querySelector("#saveButton"),
   saveAllButton: document.querySelector("#saveAllButton"),
-  autoWhiteBalance: document.querySelector("#autoWhiteBalance"),
-  autoTone: document.querySelector("#autoTone"),
   smartSummary: document.querySelector("#smartSummary"),
-  presetGrid: document.querySelector("#presetGrid"),
-  adjustmentBody: document.querySelector("#adjustmentBody"),
   fileList: document.querySelector("#fileList"),
   imageCount: document.querySelector("#imageCount")
 };
@@ -33,63 +29,25 @@ const DEFAULT_SETTINGS = Object.freeze({
   autoTone: true
 });
 
-const CONTROL_DEFS = [
-  { key: "strength", label: "강도", min: 0, max: 100, step: 1 },
-  { key: "exposure", label: "노출", min: -100, max: 100, step: 1 },
-  { key: "contrast", label: "대비", min: -100, max: 100, step: 1 },
-  { key: "warmth", label: "온도", min: -100, max: 100, step: 1 },
-  { key: "saturation", label: "색감", min: -100, max: 100, step: 1 },
-  { key: "clarity", label: "선명도", min: 0, max: 100, step: 1 },
-  { key: "vignette", label: "비네팅", min: 0, max: 100, step: 1 },
-  { key: "grain", label: "필름입자", min: 0, max: 50, step: 1 }
-];
-
-const PRESETS = [
-  {
-    key: "natural",
-    name: "Natural",
-    description: "깨끗한 기본 톤",
-    values: { exposure: 0, contrast: 5, warmth: 0, saturation: 4, clarity: 12, vignette: 0, grain: 0 }
-  },
-  {
-    key: "portrait",
-    name: "Portrait",
-    description: "부드러운 인물",
-    values: { exposure: 6, contrast: -4, warmth: 5, saturation: 3, clarity: 8, vignette: 8, grain: 0 }
-  },
-  {
-    key: "cinematic",
-    name: "Cinema",
-    description: "차분한 영화톤",
-    values: { exposure: -5, contrast: 18, warmth: -5, saturation: -4, clarity: 18, vignette: 16, grain: 6 }
-  },
-  {
-    key: "food",
-    name: "Food",
-    description: "따뜻하고 선명하게",
-    values: { exposure: 5, contrast: 12, warmth: 10, saturation: 14, clarity: 16, vignette: 4, grain: 0 }
-  },
-  {
-    key: "product",
-    name: "Product",
-    description: "중립적인 상업컷",
-    values: { exposure: 8, contrast: 10, warmth: -3, saturation: -2, clarity: 22, vignette: 0, grain: 0 }
-  },
-  {
-    key: "night",
-    name: "Night",
-    description: "야간 톤 정리",
-    values: { exposure: 4, contrast: 20, warmth: -8, saturation: 2, clarity: 24, vignette: 18, grain: 8 }
-  }
-];
-
 const STYLE_BIAS = {
   natural: { exposure: 0, contrast: 0, warmth: 0, saturation: 0, clarity: 0, vignette: 0 },
+  bright: { exposure: 14, contrast: 2, warmth: -2, saturation: 2, clarity: 6, vignette: -10 },
+  vivid: { exposure: 4, contrast: 14, warmth: 2, saturation: 22, clarity: 12, vignette: 2 },
+  soft: { exposure: 8, contrast: -8, warmth: 4, saturation: 2, clarity: -10, vignette: 3 },
+  warm: { exposure: 5, contrast: 6, warmth: 15, saturation: 7, clarity: 3, vignette: 1 },
+  cool: { exposure: 2, contrast: 9, warmth: -15, saturation: 3, clarity: 8, vignette: 4 },
   instagram: { exposure: 7, contrast: 5, warmth: 7, saturation: 10, clarity: 4, vignette: 4 },
+  cafe: { exposure: 5, contrast: 8, warmth: 12, saturation: 8, clarity: 2, vignette: 8, grain: 4 },
+  travel: { exposure: 8, contrast: 10, warmth: 3, saturation: 18, clarity: 10, vignette: -4 },
   cinematic: { exposure: -4, contrast: 14, warmth: -7, saturation: -6, clarity: 8, vignette: 14 },
+  film: { exposure: -1, contrast: 9, warmth: 7, saturation: -4, clarity: 0, vignette: 10, grain: 8 },
+  moody: { exposure: -8, contrast: 18, warmth: -3, saturation: -8, clarity: 8, vignette: 18, grain: 3 },
+  portrait: { exposure: 8, contrast: -4, warmth: 5, saturation: 4, clarity: -6, vignette: 6 },
   product: { exposure: 10, contrast: 6, warmth: -4, saturation: -6, clarity: 12, vignette: -10 },
   food: { exposure: 5, contrast: 8, warmth: 12, saturation: 14, clarity: 6, vignette: 0 },
-  space: { exposure: 12, contrast: 0, warmth: -3, saturation: -8, clarity: 6, vignette: -12 }
+  space: { exposure: 12, contrast: 0, warmth: -3, saturation: -8, clarity: 6, vignette: -12 },
+  night: { exposure: 6, contrast: 18, warmth: -8, saturation: 5, clarity: 14, vignette: 14, grain: 6 },
+  mono: { exposure: 2, contrast: 18, warmth: -3, saturation: -82, clarity: 12, vignette: 8, grain: 4 }
 };
 
 let photos = [];
@@ -102,7 +60,7 @@ let smartInFlight = false;
 let aiApiUnavailable = false;
 
 function cloneSettings(source) {
-  return { ...DEFAULT_SETTINGS, ...source };
+  return { ...DEFAULT_SETTINGS, ...source, autoWhiteBalance: true, autoTone: true };
 }
 
 function clamp(value, min, max) {
@@ -115,8 +73,6 @@ function clampInt(value, min, max, fallback = 0) {
 }
 
 function init() {
-  buildPresetButtons();
-  buildAdjustmentSliders();
   bindEvents();
   setButtonsEnabled(false);
   updateControlsFromSettings();
@@ -149,54 +105,10 @@ function bindEvents() {
     setSummary("스타일이 변경되었습니다. AI 스마트를 누르면 새 스타일로 다시 판단합니다.");
   });
 
-  dom.autoWhiteBalance.addEventListener("change", () => {
-    settings.autoWhiteBalance = dom.autoWhiteBalance.checked;
-    persistSelectedSettings();
-    renderSelected();
-  });
-  dom.autoTone.addEventListener("change", () => {
-    settings.autoTone = dom.autoTone.checked;
-    persistSelectedSettings();
-    renderSelected();
-  });
-
   window.addEventListener("resize", drawComparison);
   if ("ResizeObserver" in window) {
     const observer = new ResizeObserver(() => drawComparison());
     observer.observe(dom.dropZone);
-  }
-}
-
-function buildPresetButtons() {
-  dom.presetGrid.replaceChildren();
-  for (const preset of PRESETS) {
-    const button = document.createElement("button");
-    button.className = "preset-button";
-    button.type = "button";
-    button.dataset.preset = preset.key;
-    button.innerHTML = `<strong>${preset.name}</strong><span>${preset.description}</span>`;
-    button.addEventListener("click", () => applyPresetLook(preset.key));
-    dom.presetGrid.append(button);
-  }
-}
-
-function buildAdjustmentSliders() {
-  dom.adjustmentBody.replaceChildren();
-  for (const def of CONTROL_DEFS) {
-    const row = document.createElement("label");
-    row.className = "slider-row";
-    row.innerHTML = `
-      <span>${def.label}</span>
-      <input type="range" min="${def.min}" max="${def.max}" step="${def.step}" data-control="${def.key}" />
-      <output data-output="${def.key}">0</output>
-    `;
-    row.querySelector("input").addEventListener("input", (event) => {
-      settings[def.key] = Number(event.target.value);
-      updateControlOutputs();
-      persistSelectedSettings();
-      renderSelected();
-    });
-    dom.adjustmentBody.append(row);
   }
 }
 
@@ -466,16 +378,8 @@ async function buildLocalSmartAdjustment(photo) {
     grain: presetKey === "cinematic" ? 4 : 0
   };
 
-  for (const key of ["exposure", "contrast", "warmth", "saturation", "clarity", "vignette"]) {
+  for (const key of ["exposure", "contrast", "warmth", "saturation", "clarity", "vignette", "grain"]) {
     result[key] += bias[key] || 0;
-  }
-
-  if (!dom.autoWhiteBalance.checked) {
-    result.warmth = bias.warmth || 0;
-  }
-  if (!dom.autoTone.checked) {
-    result.exposure = bias.exposure || 0;
-    result.contrast = bias.contrast || 0;
   }
 
   return result;
@@ -492,14 +396,14 @@ function normalizeSettings(raw) {
     clarity: clampInt(raw.clarity, 0, 100, DEFAULT_SETTINGS.clarity),
     vignette: clampInt(raw.vignette, 0, 100),
     grain: clampInt(raw.grain, 0, 50),
-    autoWhiteBalance: typeof raw.autoWhiteBalance === "boolean" ? raw.autoWhiteBalance : dom.autoWhiteBalance.checked,
-    autoTone: typeof raw.autoTone === "boolean" ? raw.autoTone : dom.autoTone.checked
+    autoWhiteBalance: true,
+    autoTone: true
   };
 
-  return enforceVisibleSmartGrade(normalized);
+  return enforceVisibleSmartGrade(normalized, dom.styleSelect.value);
 }
 
-function enforceVisibleSmartGrade(nextSettings) {
+function enforceVisibleSmartGrade(nextSettings, styleKey = "natural") {
   const floors = {
     natural: { strength: 82, contrast: 12, saturation: 9, clarity: 20 },
     portrait: { strength: 78, exposure: 5, contrast: -4, warmth: 5, saturation: 6, clarity: 14, vignette: 6 },
@@ -508,7 +412,19 @@ function enforceVisibleSmartGrade(nextSettings) {
     product: { strength: 82, exposure: 8, contrast: 14, warmth: -3, saturation: -4, clarity: 26 },
     night: { strength: 86, exposure: 8, contrast: 22, warmth: -7, saturation: 7, clarity: 26, vignette: 18, grain: 6 }
   };
-  const floor = floors[nextSettings.presetKey] || floors.natural;
+  const styleFloors = {
+    bright: { strength: 82, exposure: 10, contrast: 8, saturation: 5, clarity: 18 },
+    vivid: { strength: 86, contrast: 18, saturation: 24, clarity: 22 },
+    soft: { strength: 76, exposure: 6, contrast: -4, warmth: 4, saturation: 4, clarity: 8 },
+    warm: { strength: 82, warmth: 12, saturation: 8, clarity: 16 },
+    cool: { strength: 82, warmth: -12, contrast: 14, clarity: 20 },
+    cafe: { strength: 82, warmth: 12, saturation: 10, vignette: 8, grain: 4 },
+    travel: { strength: 86, exposure: 6, contrast: 16, saturation: 22, clarity: 24 },
+    film: { strength: 80, warmth: 6, saturation: -4, vignette: 10, grain: 8 },
+    moody: { strength: 84, exposure: -6, contrast: 22, saturation: -6, vignette: 18 },
+    mono: { strength: 84, contrast: 20, saturation: -82, clarity: 22, vignette: 10, grain: 5 }
+  };
+  const floor = { ...(floors[nextSettings.presetKey] || floors.natural), ...(styleFloors[styleKey] || {}) };
   const boosted = cloneSettings(nextSettings);
 
   boosted.strength = Math.max(boosted.strength, floor.strength || boosted.strength);
@@ -529,78 +445,8 @@ function formatSettingsDigest(nextSettings) {
   return `강도 ${nextSettings.strength} / 대비 ${nextSettings.contrast} / 색감 ${nextSettings.saturation} / 선명도 ${nextSettings.clarity}`;
 }
 
-function applyPresetLook(key) {
-  const photo = selectedPhoto();
-  if (!photo) {
-    return;
-  }
-
-  const preset = PRESETS.find((item) => item.key === key);
-  if (!preset) {
-    return;
-  }
-
-  const base = cloneSettings(photo.smartBase || photo.settings || settings || DEFAULT_SETTINGS);
-  settings = cloneSettings({
-    ...base,
-    presetKey: key,
-    exposure: clampInt(base.exposure + preset.values.exposure, -100, 100),
-    contrast: clampInt(base.contrast + preset.values.contrast, -100, 100),
-    warmth: clampInt(base.warmth + preset.values.warmth, -100, 100),
-    saturation: clampInt(base.saturation + preset.values.saturation, -100, 100),
-    clarity: clampInt(Math.max(base.clarity, preset.values.clarity), 0, 100),
-    vignette: clampInt(Math.max(base.vignette, preset.values.vignette), 0, 100),
-    grain: clampInt(Math.max(base.grain, preset.values.grain), 0, 50)
-  });
-
-  photo.settings = cloneSettings(settings);
-  setSummary(`프리셋 ${preset.name} 적용 · 스마트 보정값 위에 룩만 더했습니다.`);
-  updateControlsFromSettings();
-  renderSelected();
-}
-
-function resetCurrentImage() {
-  const photo = selectedPhoto();
-  if (!photo) {
-    return;
-  }
-
-  settings = cloneSettings(DEFAULT_SETTINGS);
-  photo.settings = cloneSettings(settings);
-  photo.smartBase = null;
-  photo.smartSummary = "";
-  setSummary("초기화되었습니다. AI 스마트를 누르면 다시 판단합니다.");
-  setStatus("초기화됨");
-  updateControlsFromSettings();
-  renderSelected();
-}
-
 function updateControlsFromSettings() {
-  dom.autoWhiteBalance.checked = settings.autoWhiteBalance;
-  dom.autoTone.checked = settings.autoTone;
-  updateControlOutputs();
-
-  for (const input of dom.adjustmentBody.querySelectorAll("input[type='range']")) {
-    const key = input.dataset.control;
-    input.value = settings[key];
-  }
-
-  for (const button of dom.presetGrid.querySelectorAll(".preset-button")) {
-    button.classList.toggle("selected", button.dataset.preset === settings.presetKey);
-  }
-}
-
-function updateControlOutputs() {
-  for (const def of CONTROL_DEFS) {
-    const input = dom.adjustmentBody.querySelector(`[data-control="${def.key}"]`);
-    const output = dom.adjustmentBody.querySelector(`[data-output="${def.key}"]`);
-    if (input && Number(input.value) !== settings[def.key]) {
-      input.value = settings[def.key];
-    }
-    if (output) {
-      output.textContent = String(settings[def.key]);
-    }
-  }
+  settings = cloneSettings(settings);
 }
 
 function renderSelected() {

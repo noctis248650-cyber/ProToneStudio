@@ -2,11 +2,23 @@ const ALLOWED_PRESETS = ["natural", "portrait", "cinematic", "food", "product", 
 
 const STYLES: Record<string, string> = {
   natural: "Natural professional photo retouching. Preserve the original mood, clean contrast, balanced color.",
+  bright: "Bright and clean professional retouching. Lift exposure, keep whites clean, maintain natural color.",
+  vivid: "Vivid polished color grade. Clear contrast, lively color, crisp detail without neon oversaturation.",
+  soft: "Soft elegant retouching. Gentle contrast, pleasant highlights, smooth color, avoid harsh clarity.",
+  warm: "Warm cozy retouching. Add tasteful warmth and inviting color while protecting highlights.",
+  cool: "Cool refined retouching. Clean cooler white balance, crisp shadows, modern restrained color.",
   instagram: "Modern social media color grade. Bright, warm, crisp, attractive but not overdone.",
+  cafe: "Cafe lifestyle color grade. Warm ambience, creamy highlights, soft contrast, subtle film character.",
+  travel: "Travel photography retouching. Bright air, clear scenery, lively color, crisp texture.",
   cinematic: "Cinematic editorial look. Controlled highlights, deeper mood, subtle teal/orange if suitable.",
+  film: "Analog film-inspired grade. Gentle warmth, restrained saturation, subtle grain, natural contrast.",
+  moody: "Moody editorial retouching. Deeper contrast, restrained color, atmospheric shadows without crushing detail.",
+  portrait: "Portrait and selfie retouching. Pleasant skin tones, gentle contrast, bright eyes, avoid over-sharpening skin.",
   product: "Clean commercial product photography. Accurate whites, neutral color, crisp detail.",
   food: "Appetizing food photography. Warmth, texture, fresh color, natural contrast.",
-  space: "Interior and real estate photography. Bright, clean, wide-feeling, neutral walls, no heavy vignette."
+  space: "Interior and real estate photography. Bright, clean, wide-feeling, neutral walls, no heavy vignette.",
+  night: "Night photo retouching. Lift usable detail, control noise feeling, protect lights, crisp but not harsh.",
+  mono: "Black and white professional retouching. Remove color, emphasize luminance contrast and shape, tasteful grain if useful."
 };
 
 type Adjustment = {

@@ -113,8 +113,7 @@ button:disabled {
 
 .action-button,
 .icon-action,
-.wide-action,
-.preset-button {
+.wide-action {
   min-height: 42px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -152,23 +151,20 @@ button:disabled {
 
 .action-button:hover,
 .icon-action:hover,
-.wide-action:hover,
-.preset-button:hover {
+.wide-action:hover {
   border-color: var(--accent);
   transform: translateY(-1px);
 }
 
 .action-button:active,
 .icon-action:active,
-.wide-action:active,
-.preset-button:active {
+.wide-action:active {
   transform: translateY(1px);
 }
 
 .action-button:disabled:hover,
 .icon-action:disabled:hover,
-.wide-action:disabled:hover,
-.preset-button:disabled:hover {
+.wide-action:disabled:hover {
   border-color: var(--line);
   transform: none;
 }
@@ -400,9 +396,7 @@ details[open] summary::after {
   content: "－";
 }
 
-.section-body,
-.preset-list,
-.slider-list {
+.section-body {
   padding: 10px 2px 4px;
 }
 
@@ -429,20 +423,6 @@ select {
   margin-top: 10px;
 }
 
-.check-row {
-  display: grid;
-  grid-template-columns: 22px 1fr;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-
-.check-row input {
-  accent-color: var(--accent);
-}
-
 .smart-summary {
   min-height: 54px;
   margin: 12px 0 0;
@@ -453,59 +433,6 @@ select {
   background: #12161e;
   font-size: 0.86rem;
   line-height: 1.4;
-}
-
-.preset-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.preset-button {
-  min-height: 42px;
-  padding: 0 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  background: linear-gradient(#252b36, #171c25);
-}
-
-.preset-button strong,
-.preset-button span {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.preset-button span {
-  margin-top: 3px;
-  color: var(--muted);
-  font-size: 0.7rem;
-}
-
-.preset-button.selected {
-  border-color: var(--accent);
-  color: #071011;
-  background: linear-gradient(#cfe7e5, #93c6c2);
-}
-
-.preset-button.selected span {
-  color: rgba(7, 16, 17, 0.68);
-}
-
-.slider-row {
-  display: grid;
-  grid-template-columns: 64px 1fr 38px;
-  align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  color: var(--muted);
-  font-size: 0.86rem;
-}
-
-.slider-row output {
-  text-align: right;
-  color: var(--subtle);
 }
 
 .file-list {
@@ -624,9 +551,5 @@ select {
 
   .compare-strip span:last-child {
     text-align: right;
-  }
-
-  .preset-list {
-    grid-template-columns: 1fr;
   }
 }
