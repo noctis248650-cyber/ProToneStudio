@@ -8,3 +8,6 @@ functions/.env
 functions/.env.*
 !.env.example
 dist/
+*firebase-adminsdk*.json
+service-account*.json
+gcp-key*.json

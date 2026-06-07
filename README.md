@@ -53,6 +53,25 @@ Firebase 프로젝트 ID는 `protone-studio`로 설정되어 있습니다.
 
 `GCP_SA_KEY`는 GitHub Actions가 Firebase에 배포할 때 쓰는 서버용 인증키입니다. 로컬 PC 인증을 쓰지 않습니다.
 
+현재 배포 계정 예시:
+
+```text
+firebase-adminsdk-fbsvc@protone-studio.iam.gserviceaccount.com
+```
+
+이 계정에는 최소한 Firebase Hosting/Functions 배포와 Secret Manager 접근 권한이 필요합니다. 빠른 첫 배포 확인용으로는 Google Cloud Console의 `IAM 및 관리자 > IAM`에서 이 principal에 아래 역할을 부여하면 됩니다.
+
+- Firebase Admin
+- Cloud Functions Admin
+- Secret Manager Admin
+- Service Usage Admin
+- Service Account User
+- Cloud Run Admin
+- Cloud Build Editor
+- Artifact Registry Administrator
+
+배포 성공 후 운영 단계에서는 권한을 더 좁히는 것을 권장합니다.
+
 처음에는 배포용 service account에 Firebase/Cloud Functions/Hosting 배포 권한을 충분히 부여하고, 운영 단계에서 권한을 좁히는 것을 권장합니다.
 
 ### 4. 자동 배포
