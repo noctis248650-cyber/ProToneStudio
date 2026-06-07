@@ -1,0 +1,62 @@
+name: Deploy to Firebase
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      FIREBASE_PROJECT_ID: protone-studio
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install function dependencies
+        working-directory: functions
+        run: npm install
+
+      - name: Configure Google credentials
+        run: |
+          if [ -z "$GCP_SA_KEY" ]; then
+            echo "GCP_SA_KEY GitHub secret is missing."
+            exit 1
+          fi
+          printf '%s' "$GCP_SA_KEY" > "$HOME/gcp-key.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$HOME/gcp-key.json" >> "$GITHUB_ENV"
+
+      - name: Sync OpenAI secret to Firebase
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "OPENAI_API_KEY GitHub secret is empty. Skipping Firebase secret sync."
+            exit 0
+          fi
+          printf '%s' "$OPENAI_API_KEY" > "$RUNNER_TEMP/openai_api_key.txt"
+          npx firebase-tools@latest functions:secrets:set OPENAI_API_KEY \
+            --project "$FIREBASE_PROJECT_ID" \
+            --data-file "$RUNNER_TEMP/openai_api_key.txt" \
+            --force
+
+      - name: Deploy Hosting and Functions
+        run: |
+          if [ -z "$FIREBASE_PROJECT_ID" ]; then
+            echo "FIREBASE_PROJECT_ID GitHub secret is missing."
+            exit 1
+          fi
+          npx firebase-tools@latest deploy \
+            --project "$FIREBASE_PROJECT_ID" \
+            --only hosting,functions

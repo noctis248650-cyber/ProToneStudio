@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#111318" />
+    <title>ProTone Studio Web</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="brand">
+          <span>AI PHOTO RETOUCH</span>
+          <h1>프로톤 스튜디오</h1>
+        </div>
+        <nav class="primary-actions" aria-label="주요 작업">
+          <label class="action-button primary" for="fileInput">이미지 열기</label>
+          <button class="action-button" id="smartButton" type="button">AI 스마트</button>
+          <button class="action-button" id="saveButton" type="button">현재 저장</button>
+          <button class="action-button" id="saveAllButton" type="button">전체 저장</button>
+          <button class="icon-action" id="resetButton" type="button" aria-label="초기화">↺</button>
+        </nav>
+      </header>
+
+      <main class="layout">
+        <section class="workspace-card preview-card">
+          <div class="preview-toolbar">
+            <div>
+              <span class="eyebrow">WORK CANVAS</span>
+              <strong id="currentName">이미지 없음</strong>
+            </div>
+            <span class="status-pill" id="statusText">준비됨</span>
+          </div>
+
+          <div class="canvas-stage" id="dropZone">
+            <input id="fileInput" type="file" accept="image/*" multiple hidden />
+            <canvas id="previewCanvas"></canvas>
+            <div class="empty-state" id="emptyState">
+              <strong>이미지를 올려주세요</strong>
+              <span>드래그 앤 드롭 또는 이미지 열기</span>
+            </div>
+          </div>
+
+          <div class="compare-strip">
+            <span>BEFORE</span>
+            <input id="compareRange" type="range" min="0" max="100" value="50" />
+            <span>AFTER</span>
+          </div>
+        </section>
+
+        <aside class="workspace-card controls-card">
+          <details open>
+            <summary>스마트 보정</summary>
+            <div class="section-body">
+              <label class="field">
+                <span>스타일</span>
+                <select id="styleSelect">
+                  <option value="natural">자연스럽게</option>
+                  <option value="instagram">인스타 감성</option>
+                  <option value="cinematic">시네마틱</option>
+                  <option value="product">제품 사진</option>
+                  <option value="food">음식 사진</option>
+                  <option value="space">공간/부동산</option>
+                </select>
+              </label>
+              <button class="wide-action" id="smartButtonSide" type="button">선택 이미지 스마트 보정</button>
+              <label class="check-row">
+                <input id="autoOnSelect" type="checkbox" checked />
+                <span>이미지 선택 시 자동 판단</span>
+              </label>
+              <label class="check-row">
+                <input id="autoWhiteBalance" type="checkbox" checked />
+                <span>화이트밸런스</span>
+              </label>
+              <label class="check-row">
+                <input id="autoTone" type="checkbox" checked />
+                <span>노출/톤</span>
+              </label>
+              <p class="smart-summary" id="smartSummary">스마트 보정 대기</p>
+            </div>
+          </details>
+
+          <details open>
+            <summary>룩 프리셋</summary>
+            <div class="preset-list" id="presetGrid"></div>
+          </details>
+
+          <details>
+            <summary>수동 조정</summary>
+            <div class="slider-list" id="adjustmentBody"></div>
+          </details>
+        </aside>
+
+        <aside class="workspace-card queue-card">
+          <div class="queue-header">
+            <div>
+              <span class="eyebrow">QUEUE</span>
+              <strong>이미지 목록</strong>
+            </div>
+            <span id="imageCount">0</span>
+          </div>
+          <div class="file-list" id="fileList"></div>
+        </aside>
+      </main>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

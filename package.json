@@ -1,0 +1,10 @@
+{
+  "name": "protone-studio-firebase-v2",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "preview": "node dev-server.mjs",
+    "emulators": "firebase emulators:start",
+    "deploy": "firebase deploy"
+  }
+}
