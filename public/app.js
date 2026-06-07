@@ -394,9 +394,7 @@ async function requestAiAdjustment(photo) {
     const response = await fetch(`${supabase.url}/functions/v1/smart-adjust`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "apikey": supabase.anonKey,
-        "Authorization": `Bearer ${supabase.anonKey}`
+        "Content-Type": "text/plain"
       },
       body: JSON.stringify({ imageDataUrl, style: dom.styleSelect.value })
     });
